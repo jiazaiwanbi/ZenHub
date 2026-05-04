@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for the Go local proxy core."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Directory organization guidance before creating the first backend package layout."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "API and execution errors must stay consistent across server, router, balancer, and executor layers."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality baseline for new backend modules and tests."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "The task creates reusable router, balancer, executor, and transformer abstractions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The request path crosses HTTP handlers, canonical models, routing, balancing, execution, and observability."}
+{"file": ".trellis/tasks/05-04-zenhub-local-proxy-core/research/proxy-chain-reference.md", "reason": "Reference architecture takeaways from CLIProxyAPI for layered proxy design."}
