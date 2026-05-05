@@ -6,33 +6,31 @@
 
 ## Overview
 
-No frontend type-safety stack exists yet because the repo has no TypeScript or
-other frontend type-bearing code.
+The native GUI uses Go types, not TypeScript or another separate frontend type
+system.
 
 The closest thing to a current contract source is the Go backend:
 
 - `internal/canonical/models.go` defines the canonical request/response structs.
 - `internal/protocol/openai/openai.go` validates and parses incoming
   OpenAI-compatible payloads.
+- `internal/app/runtime.go` defines the read-only GUI view models.
 
-Those are backend contracts, not frontend typing conventions.
+Those Go structs are the current UI contract source as well.
 
 ---
 
 ## Type Organization
 
-- No frontend type directory or co-location convention exists yet.
-- Do not create shared UI type modules based on guesswork.
-- If frontend code is introduced, this section should reference real files that
-  define request types, UI state types, and validation helpers.
+- Keep GUI-facing view models in Go near the shared runtime (`internal/app`).
+- Do not create speculative shared UI type modules outside the current Go code.
 
 ---
 
 ## Validation
 
 - No frontend runtime validation library is implemented.
-- Current request validation happens on the backend in
-  `openaiprotocol.ParseChatCompletion(...)`.
+- Current validation still happens at backend/protocol boundaries.
 - Do not assume Zod, Yup, io-ts, or generated client types until the codebase
   actually introduces them.
 
@@ -40,24 +38,23 @@ Those are backend contracts, not frontend typing conventions.
 
 ## Common Patterns
 
-- None are established for frontend code yet.
-- For now, use backend contracts as the source of truth when documenting API
-  payloads, not imagined TypeScript mirrors.
+- Use `internal/app.StatusView`, `RouteView`, and `RequestView` as the source
+  of truth for the current desktop shell.
+- Avoid copying route/request fields into ad hoc GUI-only structs when the
+  shared runtime already defines them.
 
 ---
 
 ## Examples
 
-- There are no frontend `.ts` or `.tsx` type definitions in the repository.
-- `internal/canonical/models.go` and `internal/protocol/openai/openai.go` are
-  the current contract references to cite when documenting payload shape.
+- `internal/app/runtime.go` is the current GUI contract reference.
+- There are still no frontend `.ts` or `.tsx` type definitions in the repo.
 
 ---
 
 ## Forbidden Patterns
 
 - Claiming a TypeScript convention exists when there is no TypeScript in the repo.
-- Hand-copying frontend request/response types from memory instead of checking
-  the Go backend contract files.
+- Hand-copying GUI route/request structs instead of checking `internal/app`.
 - Introducing a frontend build pipeline solely to satisfy this spec; the spec
   must follow real code, not force speculative scaffolding.

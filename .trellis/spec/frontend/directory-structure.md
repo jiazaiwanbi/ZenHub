@@ -6,12 +6,8 @@
 
 ## Overview
 
-There is no frontend directory structure yet because the repository does not
-contain frontend source code.
-
-The only implemented application layout today is the Go backend under `cmd/`
-and `internal/`. Do not infer a `src/`, `app/`, `web/`, or `frontend/`
-directory from this spec.
+The repository now contains a native desktop GUI implemented in Go. There is
+still no `src/`, `app/`, `web/`, or browser-oriented frontend tree.
 
 ---
 
@@ -20,12 +16,15 @@ directory from this spec.
 ```
 .
 ├── cmd/
-│   └── client/
+│   ├── client/
+│   └── gui/
 ├── internal/
+│   ├── app/
 │   ├── balancer/
 │   ├── canonical/
 │   ├── config/
 │   ├── executor/
+│   ├── gui/
 │   ├── observability/
 │   ├── protocol/
 │   ├── proxy/
@@ -41,28 +40,25 @@ directory from this spec.
 
 ## Module Organization
 
-- No frontend modules, pages, components, hooks, or asset folders are
-  implemented.
-- The first frontend task must choose an actual stack and create a real
-  directory tree before this guide can become prescriptive.
-- Until then, frontend work should not be merged as loose files sprinkled into
-  the Go backend packages.
+- `cmd/gui/` owns the desktop binary entrypoint only.
+- `internal/gui/` owns Fyne-specific view/layout code.
+- `internal/app/` owns shared runtime bootstrap and read models consumed by the
+  GUI and the headless client.
+- New GUI files should extend these locations instead of mixing view code into
+  routing, balancing, or protocol packages.
 
 ---
 
 ## Naming Conventions
 
-- No frontend naming convention has been validated by code yet.
+- Keep the native shell entrypoint under `cmd/gui`.
+- Keep Fyne-specific widgets and window composition under `internal/gui`.
 - Do not assume React/Next.js/Vite naming such as `components/`, `hooks/`, or
-  `pages/`.
-- If the first frontend implementation establishes those names, update this
-  file with real paths from that task.
+  `pages/` unless a later task actually introduces them.
 
 ---
 
 ## Examples
 
-- There are no frontend example files in the repo today.
-- Backend examples that show the current repo shape:
-  `cmd/client/main.go`, `internal/server/server.go`, and
-  `internal/proxy/service.go`.
+- Native GUI examples:
+  `cmd/gui/main.go`, `internal/gui/window.go`, and `internal/app/runtime.go`.

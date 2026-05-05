@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	appcore "zenhub/internal/app"
+	"zenhub/internal/gui"
 )
 
 func main() {
@@ -31,18 +27,9 @@ func main() {
 	}
 
 	status := runtime.Status()
-	log.Printf("zenhub client listening on http://%s", status.ListenAddress)
+	log.Printf("zenhub gui listening on http://%s", status.ListenAddress)
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(signals)
-
-	<-signals
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := runtime.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("shutdown runtime: %v", err)
+	if err := gui.Run(runtime); err != nil {
+		log.Fatalf("run gui: %v", err)
 	}
 }

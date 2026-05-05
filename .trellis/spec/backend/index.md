@@ -1,15 +1,17 @@
 # Backend Development Guidelines
 
-> Current backend conventions for the Go proxy implementation in this repo.
+> Current backend conventions for the Go proxy and native desktop runtime in this repo.
 
 ---
 
 ## Overview
 
-The implemented product today is a Go backend. Runtime wiring starts in
-`cmd/client/main.go`, application logic lives under `internal/`, and the
-request path is split into protocol parsing, canonical models, routing,
-balancing, execution, transformation, and observability packages.
+The implemented product today is a Go backend with two runnable shells:
+`cmd/client/main.go` for the headless proxy and `cmd/gui/main.go` for the
+native desktop shell. Shared runtime wiring lives in `internal/app/runtime.go`,
+application logic lives under `internal/`, and the request path is split into
+protocol parsing, canonical models, routing, balancing, execution,
+transformation, and observability packages.
 
 These guides are intentionally grounded in the current codebase. They document
 the architecture that exists now, including gaps such as the absence of a
@@ -61,8 +63,8 @@ database layer or shared structured logger.
 - [ ] Database guidance still says no persistence layer exists unless code in
   the same task introduces one.
 - [ ] Logging guidance still reflects standard-library `log` in
-  `cmd/client/main.go` and in-memory observability records, not a made-up
-  structured logger.
+  `cmd/client/main.go` and `cmd/gui/main.go`, plus in-memory observability
+  records, not a made-up structured logger.
 - [ ] Code examples still point at real files and current function/package
   names.
 - [ ] Task manifests include the backend guideline files this task depends on.

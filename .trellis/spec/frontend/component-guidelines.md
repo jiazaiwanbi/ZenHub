@@ -6,60 +6,57 @@
 
 ## Overview
 
-No UI component system exists in the repository today.
+The current UI layer is a native Fyne desktop shell.
 
-- There are no `.tsx`, `.jsx`, `.vue`, `.svelte`, or desktop view files.
-- There is no established design system, prop convention, or styling approach.
-- Any component guidance beyond "none exists yet" would be invented.
+- The UI is implemented in Go, not in `.tsx`, `.jsx`, `.vue`, or `.svelte`.
+- `internal/gui/window.go` is the current source of truth for window
+  composition and widget layout.
+- There is still no design system beyond the Fyne widget set used there.
 
 ---
 
 ## Component Structure
 
-- No standard component file structure exists yet.
-- The first frontend implementation must define the real structure through code
-  and then update this guide with concrete examples.
+- Keep view composition close to the window or screen that owns it.
+- Extract helpers only when widget assembly or cell formatting starts repeating.
+- Keep route/request formatting in the GUI layer, not in proxy/runtime packages.
 
 ---
 
 ## Props Conventions
 
-- No props convention exists because no component code exists.
-- Do not assume TypeScript interfaces, runtime prop validation, or composition
-  helpers until the chosen UI stack proves them.
+- Fyne widgets should receive already-shaped read models from `internal/app`.
+- Do not invent React-style prop conventions for the current Go-native GUI.
 
 ---
 
 ## Styling Patterns
 
-- No styling system is implemented.
-- Do not assume Tailwind, CSS modules, inline styles, styled-components, or a
-  native desktop theming solution.
-- Styling conventions must be documented only after real frontend files land.
+- Prefer Fyne layout containers, forms, cards, and tables over custom drawing.
+- Keep the MVP visually simple and operational; avoid custom theme work unless
+  a later task needs it.
 
 ---
 
 ## Accessibility
 
-- There is no implemented UI to audit for accessibility yet.
-- The first user-facing frontend task should state its accessibility baseline in
-  code review and update this file with the actual patterns used.
+- Prefer readable labels, selectable status text, and explicit table columns.
+- If a later task adds keyboard-heavy workflows or custom rendering, document
+  the accessibility trade-offs in this guide.
 
 ---
 
 ## Examples
 
-- There are no frontend component files to cite yet.
-- If a task needs API contract examples before a UI exists, use the backend
-  request/response files such as `internal/canonical/models.go` and
-  `internal/server/server.go` rather than inventing component props.
+- `internal/gui/window.go` shows the current pattern: status cards plus tables
+  bound to read-only runtime views from `internal/app/runtime.go`.
 
 ---
 
 ## Common Mistakes
 
-- Writing a speculative React component library when the repo does not yet have
-  a frontend runtime.
-- Claiming component conventions exist without referencing actual source files.
-- Mixing UI experiments into backend packages under `internal/` because there
-  is no dedicated frontend tree yet.
+- Writing a speculative React component library when the repo has a Go-native
+  GUI only.
+- Reaching into proxy, router, or balancer internals from widgets instead of
+  consuming `internal/app` read models.
+- Treating Fyne widget trees as precedent for a future browser frontend.

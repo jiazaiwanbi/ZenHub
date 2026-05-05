@@ -7,7 +7,8 @@
 ## Overview
 
 The current runtime uses the Go standard library `log` package only at process
-startup and fatal failure boundaries in `cmd/client/main.go`.
+startup and fatal failure boundaries in `cmd/client/main.go` and
+`cmd/gui/main.go`.
 
 Request-level telemetry is not emitted through a shared logger. Instead, the
 proxy service records bounded request metadata in memory through
@@ -23,8 +24,8 @@ or assume one exists.
 - `log.Printf`: use for coarse process lifecycle messages at the entry point.
   Current example: announcing the listen address in `cmd/client/main.go`.
 - `log.Fatal` / `log.Fatalf`: use only for unrecoverable startup and server
-  failures in `main()`, such as missing config, invalid wiring, or
-  `ListenAndServe` failure.
+  failures in `main()`, such as missing config, invalid wiring, runtime start
+  failure, or GUI bootstrap failure.
 - Package code under `internal/` should usually return errors upward instead of
   logging them locally. Error classification and HTTP mapping already happen in
   `internal/proxy` and `internal/server`.
@@ -34,9 +35,9 @@ or assume one exists.
 ## Current Logging Pattern
 
 ```go
-log.Printf("zenhub client listening on http://%s", runtimeConfig.Listen)
-if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-    log.Fatalf("serve: %v", err)
+runtime, err := appcore.NewRuntime(configPath)
+if err != nil {
+    log.Fatalf("build runtime: %v", err)
 }
 ```
 
@@ -53,7 +54,7 @@ if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrSer
 
 - Process startup with the listen address.
 - Fatal configuration or dependency wiring failures in `main()`.
-- Fatal server startup/runtime failures that prevent the proxy from serving.
+- Fatal runtime startup failures that prevent the proxy from serving.
 - Request metadata via `internal/observability/Recorder`, not raw log lines,
   when the goal is troubleshooting route, node, or retry behavior.
 
@@ -71,7 +72,8 @@ if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrSer
 
 ## Examples
 
-- `cmd/client/main.go` is the only place currently using `log`.
+- `cmd/client/main.go` and `cmd/gui/main.go` are the only places currently
+  using `log`.
 - `internal/proxy/service.go` records request outcome metadata instead of
   printing request-scoped logs.
 - `internal/observability/recorder.go` shows the in-memory record schema.

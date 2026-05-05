@@ -1,0 +1,16 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Overall backend constraints still matter because the GUI MVP will reuse and refactor the local proxy runtime."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "The GUI task will introduce new runtime/UI packages and possibly a shared app core, so package boundaries must stay consistent."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "GUI startup and runtime status should preserve typed backend errors instead of inventing ad hoc strings."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "The GUI task may surface or extend runtime logging and should follow the current logging/observability constraints."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "The task refactors cross-layer runtime code and must preserve canonical/runtime contracts with tests."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "This is the first real UI task in the repo, so the frontend bootstrap constraints must be read before introducing GUI code."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "The task needs to establish the first concrete GUI/frontend directory layout in the repo."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "The task will define the first real view/component conventions for the GUI shell."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Even if React hooks are not used, this guide captures what must not be assumed from prior frontend ecosystems."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "The GUI will need a clear read model for runtime status, routes, and request records."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "The task introduces the first actual UI-side data model contracts and should update this guidance accordingly."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "The first frontend/native GUI slice needs explicit review and testing expectations."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "The task should reuse the existing proxy core instead of forking logic into the GUI layer."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The GUI slice crosses app shell, runtime core, config, and observability layers."}
+{"file": ".trellis/tasks/05-05-zenhub-native-gui-observability/research/go-native-gui-frameworks.md", "reason": "Carries the GUI toolkit comparison and the Fyne MVP recommendation."}
+{"file": ".trellis/tasks/05-05-zenhub-native-gui-observability/research/gui-mvp-scope.md", "reason": "Carries the recommended read-only MVP scope for the first GUI slice."}
