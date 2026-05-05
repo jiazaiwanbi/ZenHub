@@ -39,3 +39,36 @@ Implemented the Phase 1 localhost proxy core with canonical parsing, route selec
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: Bootstrap Trellis project specs
+
+**Date**: 2026-05-05
+**Task**: Bootstrap Trellis project specs
+**Branch**: `main`
+
+### Summary
+
+Filled the remaining Trellis backend/frontend bootstrap specs from actual repo state, added bootstrap research/context manifests, and documented the current absence of frontend, database, and structured logging implementations where appropriate.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ab17e66` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
