@@ -72,3 +72,36 @@ Filled the remaining Trellis backend/frontend bootstrap specs from actual repo s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Native GUI observability MVP
+
+**Date**: 2026-05-05
+**Task**: Native GUI observability MVP
+**Branch**: `main`
+
+### Summary
+
+Added the first Fyne-based native desktop GUI slice as a single-process shell over the local proxy core, including shared runtime bootstrap, service status/routes/request views, task research, and spec updates for the first real GUI structure.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0000b17` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
