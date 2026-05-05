@@ -1,12 +1,19 @@
 # Backend Development Guidelines
 
-> Best practices for backend development in this project.
+> Current backend conventions for the Go proxy implementation in this repo.
 
 ---
 
 ## Overview
 
-This directory contains guidelines for backend development. Fill in each file with your project's specific conventions.
+The implemented product today is a Go backend. Runtime wiring starts in
+`cmd/client/main.go`, application logic lives under `internal/`, and the
+request path is split into protocol parsing, canonical models, routing,
+balancing, execution, transformation, and observability packages.
+
+These guides are intentionally grounded in the current codebase. They document
+the architecture that exists now, including gaps such as the absence of a
+database layer or shared structured logger.
 
 ---
 
@@ -14,25 +21,52 @@ This directory contains guidelines for backend development. Fill in each file wi
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | In progress |
-| [Database Guidelines](./database-guidelines.md) | ORM patterns, queries, migrations | To fill |
-| [Error Handling](./error-handling.md) | Error types, handling strategies | In progress |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | In progress |
-| [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
+| [Directory Structure](./directory-structure.md) | Module organization and file layout | Documented |
+| [Database Guidelines](./database-guidelines.md) | Current persistence reality and rules for adding a database later | Documented |
+| [Error Handling](./error-handling.md) | Error types, handling strategies | Documented |
+| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | Documented |
+| [Logging Guidelines](./logging-guidelines.md) | Current runtime logging and observability patterns | Documented |
 
 ---
 
-## How to Fill These Guidelines
+## Pre-Development Checklist
 
-For each guideline file:
-
-1. Document your project's **actual conventions** (not ideals)
-2. Include **code examples** from your codebase
-3. List **forbidden patterns** and why
-4. Add **common mistakes** your team has made
-
-The goal is to help AI assistants and new team members understand how YOUR project works.
+- [ ] Read [Directory Structure](./directory-structure.md) before adding or
+  moving Go packages.
+- [ ] Read [Database Guidelines](./database-guidelines.md) if the task touches
+  persistence, durable state, or config that might otherwise become storage.
+- [ ] Read [Error Handling](./error-handling.md) if request validation, status
+  mapping, retries, or streaming behavior changes.
+- [ ] Read [Logging Guidelines](./logging-guidelines.md) if the task changes
+  startup logging, observability records, or troubleshooting output.
+- [ ] Read [Quality Guidelines](./quality-guidelines.md) before changing
+  canonical models, transformers, routing, balancing, or tests.
 
 ---
 
-**Language**: All documentation should be written in **English**.
+## How to Use These Guidelines
+
+1. Start with [Directory Structure](./directory-structure.md) when deciding
+   where new Go code belongs.
+2. Read the specific guide for the concern you are changing: error behavior,
+   logging, persistence, or quality checks.
+3. Update these docs when the implementation changes materially. Future AI
+   tasks load them automatically, so stale docs are harmful.
+
+---
+
+## Quality Check
+
+- [ ] The described package layout still matches `cmd/` and `internal/`.
+- [ ] Database guidance still says no persistence layer exists unless code in
+  the same task introduces one.
+- [ ] Logging guidance still reflects standard-library `log` in
+  `cmd/client/main.go` and in-memory observability records, not a made-up
+  structured logger.
+- [ ] Code examples still point at real files and current function/package
+  names.
+- [ ] Task manifests include the backend guideline files this task depends on.
+
+---
+
+**Language**: All documentation should remain in **English**.

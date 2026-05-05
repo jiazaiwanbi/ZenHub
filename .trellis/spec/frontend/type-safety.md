@@ -6,46 +6,58 @@
 
 ## Overview
 
-<!--
-Document your project's type safety conventions here.
+No frontend type-safety stack exists yet because the repo has no TypeScript or
+other frontend type-bearing code.
 
-Questions to answer:
-- What type system do you use?
-- How are types organized?
-- What validation library do you use?
-- How do you handle type inference?
--->
+The closest thing to a current contract source is the Go backend:
 
-(To be filled by the team)
+- `internal/canonical/models.go` defines the canonical request/response structs.
+- `internal/protocol/openai/openai.go` validates and parses incoming
+  OpenAI-compatible payloads.
+
+Those are backend contracts, not frontend typing conventions.
 
 ---
 
 ## Type Organization
 
-<!-- Where types are defined, shared types vs local types -->
-
-(To be filled by the team)
+- No frontend type directory or co-location convention exists yet.
+- Do not create shared UI type modules based on guesswork.
+- If frontend code is introduced, this section should reference real files that
+  define request types, UI state types, and validation helpers.
 
 ---
 
 ## Validation
 
-<!-- Runtime validation patterns (Zod, Yup, io-ts, etc.) -->
-
-(To be filled by the team)
+- No frontend runtime validation library is implemented.
+- Current request validation happens on the backend in
+  `openaiprotocol.ParseChatCompletion(...)`.
+- Do not assume Zod, Yup, io-ts, or generated client types until the codebase
+  actually introduces them.
 
 ---
 
 ## Common Patterns
 
-<!-- Type utilities, generics, type guards -->
+- None are established for frontend code yet.
+- For now, use backend contracts as the source of truth when documenting API
+  payloads, not imagined TypeScript mirrors.
 
-(To be filled by the team)
+---
+
+## Examples
+
+- There are no frontend `.ts` or `.tsx` type definitions in the repository.
+- `internal/canonical/models.go` and `internal/protocol/openai/openai.go` are
+  the current contract references to cite when documenting payload shape.
 
 ---
 
 ## Forbidden Patterns
 
-<!-- any, type assertions, etc. -->
-
-(To be filled by the team)
+- Claiming a TypeScript convention exists when there is no TypeScript in the repo.
+- Hand-copying frontend request/response types from memory instead of checking
+  the Go backend contract files.
+- Introducing a frontend build pipeline solely to satisfy this spec; the spec
+  must follow real code, not force speculative scaffolding.

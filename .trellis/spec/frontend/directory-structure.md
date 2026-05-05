@@ -6,49 +6,63 @@
 
 ## Overview
 
-<!--
-Document your project's frontend directory structure here.
+There is no frontend directory structure yet because the repository does not
+contain frontend source code.
 
-Questions to answer:
-- Where do components live?
-- How are features/modules organized?
-- Where are shared utilities?
-- How are assets organized?
--->
-
-(To be filled by the team)
+The only implemented application layout today is the Go backend under `cmd/`
+and `internal/`. Do not infer a `src/`, `app/`, `web/`, or `frontend/`
+directory from this spec.
 
 ---
 
 ## Directory Layout
 
 ```
-<!-- Replace with your actual structure -->
-src/
-├── ...
-└── ...
+.
+├── cmd/
+│   └── client/
+├── internal/
+│   ├── balancer/
+│   ├── canonical/
+│   ├── config/
+│   ├── executor/
+│   ├── observability/
+│   ├── protocol/
+│   ├── proxy/
+│   ├── router/
+│   ├── server/
+│   └── transformer/
+├── .trellis/
+├── requirements_CN.md
+└── sample-config.json
 ```
 
 ---
 
 ## Module Organization
 
-<!-- How should new features be organized? -->
-
-(To be filled by the team)
+- No frontend modules, pages, components, hooks, or asset folders are
+  implemented.
+- The first frontend task must choose an actual stack and create a real
+  directory tree before this guide can become prescriptive.
+- Until then, frontend work should not be merged as loose files sprinkled into
+  the Go backend packages.
 
 ---
 
 ## Naming Conventions
 
-<!-- File and folder naming rules -->
-
-(To be filled by the team)
+- No frontend naming convention has been validated by code yet.
+- Do not assume React/Next.js/Vite naming such as `components/`, `hooks/`, or
+  `pages/`.
+- If the first frontend implementation establishes those names, update this
+  file with real paths from that task.
 
 ---
 
 ## Examples
 
-<!-- Link to well-organized modules as examples -->
-
-(To be filled by the team)
+- There are no frontend example files in the repo today.
+- Backend examples that show the current repo shape:
+  `cmd/client/main.go`, `internal/server/server.go`, and
+  `internal/proxy/service.go`.

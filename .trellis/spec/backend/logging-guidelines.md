@@ -6,46 +6,83 @@
 
 ## Overview
 
-<!--
-Document your project's logging conventions here.
+The current runtime uses the Go standard library `log` package only at process
+startup and fatal failure boundaries in `cmd/client/main.go`.
 
-Questions to answer:
-- What logging library do you use?
-- What are the log levels and when to use each?
-- What should be logged?
-- What should NOT be logged (PII, secrets)?
--->
+Request-level telemetry is not emitted through a shared logger. Instead, the
+proxy service records bounded request metadata in memory through
+`internal/observability/recorder.go`.
 
-(To be filled by the team)
+There is no project-wide structured logging package yet. Do not document one
+or assume one exists.
 
 ---
 
 ## Log Levels
 
-<!-- When to use each level: debug, info, warn, error -->
-
-(To be filled by the team)
+- `log.Printf`: use for coarse process lifecycle messages at the entry point.
+  Current example: announcing the listen address in `cmd/client/main.go`.
+- `log.Fatal` / `log.Fatalf`: use only for unrecoverable startup and server
+  failures in `main()`, such as missing config, invalid wiring, or
+  `ListenAndServe` failure.
+- Package code under `internal/` should usually return errors upward instead of
+  logging them locally. Error classification and HTTP mapping already happen in
+  `internal/proxy` and `internal/server`.
 
 ---
 
-## Structured Logging
+## Current Logging Pattern
 
-<!-- Log format, required fields -->
+```go
+log.Printf("zenhub client listening on http://%s", runtimeConfig.Listen)
+if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+    log.Fatalf("serve: %v", err)
+}
+```
 
-(To be filled by the team)
+- Keep logging centralized at the process boundary until a real shared logging
+  abstraction exists.
+- For per-request metadata, prefer `observability.Record` fields such as
+  `Model`, `RouteMode`, `SelectedNode`, `RetryCount`, and `FinalStatus`.
+- If a future task introduces structured logs, update this guide with the real
+  package, schema, and call sites in the same change.
 
 ---
 
 ## What to Log
 
-<!-- Important events to log -->
-
-(To be filled by the team)
+- Process startup with the listen address.
+- Fatal configuration or dependency wiring failures in `main()`.
+- Fatal server startup/runtime failures that prevent the proxy from serving.
+- Request metadata via `internal/observability/Recorder`, not raw log lines,
+  when the goal is troubleshooting route, node, or retry behavior.
 
 ---
 
 ## What NOT to Log
 
-<!-- Sensitive data, PII, secrets -->
+- Provider API keys resolved from `api_key` or `api_key_env`.
+- Full request bodies, model prompts, or raw upstream responses.
+- Duplicate error logs from lower-level packages when the error is already
+  returned to `internal/server` or captured in `observability.Record.Error`.
+- Invented debug-level logging conventions; there is no debug logger today.
 
-(To be filled by the team)
+---
+
+## Examples
+
+- `cmd/client/main.go` is the only place currently using `log`.
+- `internal/proxy/service.go` records request outcome metadata instead of
+  printing request-scoped logs.
+- `internal/observability/recorder.go` shows the in-memory record schema.
+
+---
+
+## Common Mistakes
+
+- Adding ad hoc `log.Printf` calls throughout `internal/` packages instead of
+  returning typed errors.
+- Logging raw prompts or upstream payloads just because they are available in
+  canonical or protocol structs.
+- Treating the in-memory observability recorder as if it were a permanent log
+  sink.

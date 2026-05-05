@@ -6,46 +6,52 @@
 
 ## Overview
 
-<!--
-Document your project's hook conventions here.
+No hook layer exists because there is no React or equivalent frontend runtime in
+the repository today.
 
-Questions to answer:
-- What custom hooks do you have?
-- How do you handle data fetching?
-- What are the naming conventions?
-- How do you share stateful logic?
--->
-
-(To be filled by the team)
+This means there are no custom hooks, no client-side data-fetching utilities,
+and no shared UI stateful logic patterns to document yet.
 
 ---
 
 ## Custom Hook Patterns
 
-<!-- How to create and structure custom hooks -->
-
-(To be filled by the team)
+- None are established.
+- Do not add `use*` utilities or hook folders unless the task also introduces
+  the actual frontend stack that needs them.
 
 ---
 
 ## Data Fetching
 
-<!-- How data fetching is handled (React Query, SWR, etc.) -->
-
-(To be filled by the team)
+- No frontend data-fetching library is implemented.
+- The only implemented API consumer path today is server-side Go code calling
+  upstream providers through `internal/executor/direct.go`.
+- If a future frontend consumes the local API, its first task must document the
+  actual fetching layer rather than assuming React Query, SWR, or fetch wrappers.
 
 ---
 
 ## Naming Conventions
 
-<!-- Hook naming rules (use*, etc.) -->
+- No hook naming convention exists yet.
+- Do not assume `useSomething` names until there is a hook-capable frontend in
+  the repo.
 
-(To be filled by the team)
+---
+
+## Examples
+
+- There are no frontend hook files or hook usage sites in the repo today.
+- `internal/executor/direct.go` is a useful counterexample: current network I/O
+  happens in backend Go code, not in a client-side fetching hook.
 
 ---
 
 ## Common Mistakes
 
-<!-- Hook-related mistakes your team has made -->
-
-(To be filled by the team)
+- Assuming React and adding hooks before the project has chosen a frontend
+  runtime.
+- Creating client-side fetching abstractions without first documenting which
+  backend endpoints they consume.
+- Treating backend helper packages as precedent for frontend hook structure.
