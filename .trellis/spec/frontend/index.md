@@ -8,8 +8,8 @@
 
 This repository now contains a first native desktop GUI slice implemented in Go
 with `Fyne`. The UI entrypoint is `cmd/gui/main.go`, the Fyne view layer lives
-in `internal/gui/window.go`, and the GUI reads in-process runtime state from
-`internal/app/runtime.go`.
+in `internal/client/gui/window.go`, and the GUI reads in-process runtime state
+from `internal/client/app/runtime.go`.
 
 There is still no web frontend, React stack, or TypeScript tree. These guides
 therefore document the actual native GUI conventions that now exist and keep
@@ -62,7 +62,7 @@ future tasks honest about what the repo still does not implement.
 - [ ] No section implies implemented frontend source files, components, hooks,
   stores, or type modules exist when they do not.
 - [ ] Native GUI sections reference the real files under `cmd/gui/`,
-  `internal/gui/`, and `internal/app/`.
+  `internal/client/gui/`, and `internal/client/app/`.
 - [ ] Example sections cite real GUI files instead of abstract planning notes.
 - [ ] Backend references are described as backend contracts, not as proof of a
   browser frontend architecture.

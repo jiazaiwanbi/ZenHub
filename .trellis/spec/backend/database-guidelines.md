@@ -11,8 +11,8 @@ No database layer exists in the repository today.
 - There is no ORM or SQL query package under `internal/`.
 - There are no migrations, schema files, repository packages, or database tests.
 - Runtime state that might otherwise tempt people toward persistence currently
-  stays in memory, for example `internal/observability/recorder.go`.
-- Configuration is loaded from JSON via `internal/config/config.go` and
+  stays in memory, for example `internal/core/observability/recorder.go`.
+- Configuration is loaded from JSON via `internal/client/config/config.go` and
   `sample-config.json`; it does not establish a database connection.
 
 This file exists to stop contributors and agents from inventing a persistence
@@ -38,26 +38,27 @@ architecture that is not present in the codebase.
   history, quotas, or any other data that must survive process restarts.
 
 ### 2. Signatures
-- Current config entry point: `internal/config.Load(path string) (Runtime, error)`
-- Current in-memory state holder: `internal/observability.NewRecorder(limit int) *Recorder`
+- Current config entry point: `internal/client/config.Load(path string) (Runtime, error)`
+- Current in-memory state holder: `internal/core/observability.NewRecorder(limit int) *Recorder`
 - Current request path has no repository or transaction interface.
 
 ### 3. Contracts
-- Do not hide database access inside `internal/server`, `internal/router`,
-  `internal/balancer`, `internal/executor`, or `internal/transformer`.
+- Do not hide database access inside `internal/client/localhostapi`,
+  `internal/core/router`, `internal/core/balancer`, `internal/core/executor`,
+  or `internal/core/transformer`.
 - Any future persistence layer must be introduced as an explicit package with a
-  clear call site from higher-level orchestration code such as `internal/proxy`.
+  clear call site from higher-level orchestration code such as `internal/core/proxy`.
 - Migration tooling, schema ownership, and connection configuration are
   currently undefined and must be documented at the same time the first real
   database code lands.
 - Environment-based secret resolution should follow the existing config pattern
-  used for provider API keys (`APIKeyEnv` in `internal/config/config.go`).
+  used for provider API keys (`APIKeyEnv` in `internal/client/config/config.go`).
 
 ### 4. Validation & Error Matrix
 - Need durable state, but no storage package exists -> create a dedicated
   package and extend this spec in the same task.
 - Need quick local persistence and want to write directly from a handler ->
-  reject; keep I/O out of `internal/server`.
+  reject; keep I/O out of `internal/client/localhostapi`.
 - Need schema evolution support -> add migration tooling before shipping schema
   changes to multiple environments.
 - Need retry or routing state to survive restarts -> document exactly which
@@ -104,9 +105,9 @@ columns, indexes, or migrations in the repo.
 
 ## Examples
 
-- `internal/config/config.go` shows that runtime configuration is loaded from a
+- `internal/client/config/config.go` shows that runtime configuration is loaded from a
   JSON file rather than persistent storage.
-- `internal/observability/recorder.go` shows the only implemented state store:
+- `internal/core/observability/recorder.go` shows the only implemented state store:
   a bounded in-memory recorder.
 - `sample-config.json` is the concrete example of how routes and provider
   groups are configured today.

@@ -12,7 +12,7 @@ startup and fatal failure boundaries in `cmd/client/main.go` and
 
 Request-level telemetry is not emitted through a shared logger. Instead, the
 proxy service records bounded request metadata in memory through
-`internal/observability/recorder.go`.
+`internal/core/observability/recorder.go`.
 
 There is no project-wide structured logging package yet. Do not document one
 or assume one exists.
@@ -28,7 +28,7 @@ or assume one exists.
   failure, or GUI bootstrap failure.
 - Package code under `internal/` should usually return errors upward instead of
   logging them locally. Error classification and HTTP mapping already happen in
-  `internal/proxy` and `internal/server`.
+  `internal/core/proxy` and `internal/client/localhostapi`.
 
 ---
 
@@ -55,7 +55,7 @@ if err != nil {
 - Process startup with the listen address.
 - Fatal configuration or dependency wiring failures in `main()`.
 - Fatal runtime startup failures that prevent the proxy from serving.
-- Request metadata via `internal/observability/Recorder`, not raw log lines,
+- Request metadata via `internal/core/observability/Recorder`, not raw log lines,
   when the goal is troubleshooting route, node, or retry behavior.
 
 ---
@@ -65,7 +65,8 @@ if err != nil {
 - Provider API keys resolved from `api_key` or `api_key_env`.
 - Full request bodies, model prompts, or raw upstream responses.
 - Duplicate error logs from lower-level packages when the error is already
-  returned to `internal/server` or captured in `observability.Record.Error`.
+  returned to `internal/client/localhostapi` or captured in
+  `observability.Record.Error`.
 - Invented debug-level logging conventions; there is no debug logger today.
 
 ---
@@ -74,9 +75,9 @@ if err != nil {
 
 - `cmd/client/main.go` and `cmd/gui/main.go` are the only places currently
   using `log`.
-- `internal/proxy/service.go` records request outcome metadata instead of
+- `internal/core/proxy/service.go` records request outcome metadata instead of
   printing request-scoped logs.
-- `internal/observability/recorder.go` shows the in-memory record schema.
+- `internal/core/observability/recorder.go` shows the in-memory record schema.
 
 ---
 

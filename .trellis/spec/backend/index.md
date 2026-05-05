@@ -8,7 +8,8 @@
 
 The implemented product today is a Go backend with two runnable shells:
 `cmd/client/main.go` for the headless proxy and `cmd/gui/main.go` for the
-native desktop shell. Shared runtime wiring lives in `internal/app/runtime.go`,
+native desktop shell. Shared runtime wiring lives in
+`internal/client/app/runtime.go`,
 application logic lives under `internal/`, and the request path is split into
 protocol parsing, canonical models, routing, balancing, execution,
 transformation, and observability packages.

@@ -21,15 +21,15 @@ where the GUI depends on shared state or startup behavior.
 - Writing frontend spec text that references nonexistent files or invented team
   conventions.
 - Duplicating runtime or API contracts by hand without checking
-  `internal/app/runtime.go`, `internal/canonical/models.go`, and
-  `internal/server/server.go`.
+  `internal/client/app/runtime.go`, `internal/core/canonical/models.go`, and
+  `internal/client/localhostapi/server.go`.
 
 ---
 
 ## Required Patterns
 
 - Native GUI work should keep stack choices explicit: Fyne views in
-  `internal/gui`, shared runtime in `internal/app`.
+  `internal/client/gui`, shared runtime in `internal/client/app`.
 - Validate runtime-dependent GUI behavior with Go tests around the shared
   runtime boundary.
 - If a future frontend consumes the local API, validate behavior against the
@@ -50,7 +50,7 @@ where the GUI depends on shared state or startup behavior.
 
 ## Examples
 
-- `internal/app/runtime_test.go` is the current example of GUI-facing runtime
+- `internal/client/app/runtime_test.go` is the current example of GUI-facing runtime
   verification.
 - Repo verification remains Go-oriented; do not relabel it as a browser stack.
 
@@ -58,7 +58,7 @@ where the GUI depends on shared state or startup behavior.
 
 ## Code Review Checklist
 
-- Does the task keep GUI reads inside `internal/app` instead of reaching into
+- Does the task keep GUI reads inside `internal/client/app` instead of reaching into
   proxy or balancer internals?
 - Does it use real Go/Fyne commands and files instead of invented web tooling?
 - Does it update this spec directory with concrete source-file references?

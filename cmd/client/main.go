@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	appcore "zenhub/internal/app"
+	appcore "zenhub/internal/client/app"
 )
 
 func main() {

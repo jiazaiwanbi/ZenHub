@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Overall backend architecture rules still govern how the refactor should separate reusable core from client-specific runtime."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "This task changes package layout and must keep the documented structure aligned with the implementation."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Typed error boundaries must survive package moves without collapsing into string-based handling."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Client runtime and GUI entrypoint logging behavior will move under clearer product boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "The refactor must preserve code-grounded contracts and test coverage through package churn."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "The refactor is explicitly about avoiding duplicated client/server logic by extracting shared core."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The change spans binaries, runtime bootstrap, localhost API, shared proxy core, and future server namespace boundaries."}
+{"file": ".trellis/tasks/05-05-zenhub-core-client-server-boundaries/research/current-package-mapping.md", "reason": "Maps current packages to the intended core/client/server split so implementation stays aligned with the user’s architecture requirement."}

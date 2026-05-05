@@ -9,7 +9,7 @@
 The current UI layer is a native Fyne desktop shell.
 
 - The UI is implemented in Go, not in `.tsx`, `.jsx`, `.vue`, or `.svelte`.
-- `internal/gui/window.go` is the current source of truth for window
+- `internal/client/gui/window.go` is the current source of truth for window
   composition and widget layout.
 - There is still no design system beyond the Fyne widget set used there.
 
@@ -25,7 +25,8 @@ The current UI layer is a native Fyne desktop shell.
 
 ## Props Conventions
 
-- Fyne widgets should receive already-shaped read models from `internal/app`.
+- Fyne widgets should receive already-shaped read models from
+  `internal/client/app`.
 - Do not invent React-style prop conventions for the current Go-native GUI.
 
 ---
@@ -48,8 +49,9 @@ The current UI layer is a native Fyne desktop shell.
 
 ## Examples
 
-- `internal/gui/window.go` shows the current pattern: status cards plus tables
-  bound to read-only runtime views from `internal/app/runtime.go`.
+- `internal/client/gui/window.go` shows the current pattern: status cards plus
+  tables bound to read-only runtime views from
+  `internal/client/app/runtime.go`.
 
 ---
 
@@ -58,5 +60,5 @@ The current UI layer is a native Fyne desktop shell.
 - Writing a speculative React component library when the repo has a Go-native
   GUI only.
 - Reaching into proxy, router, or balancer internals from widgets instead of
-  consuming `internal/app` read models.
+  consuming `internal/client/app` read models.
 - Treating Fyne widget trees as precedent for a future browser frontend.

@@ -25,7 +25,8 @@ and no shared `use*` patterns to document today.
 ## Data Fetching
 
 - No frontend data-fetching library is implemented.
-- The current GUI reads runtime state in-process from `internal/app.Runtime`.
+- The current GUI reads runtime state in-process from
+  `internal/client/app.Runtime`.
 - If a future frontend consumes the local API, document the actual fetching
   layer rather than assuming React Query, SWR, or fetch wrappers.
 
@@ -41,8 +42,8 @@ and no shared `use*` patterns to document today.
 
 ## Examples
 
-- `internal/gui/window.go` is a useful counterexample: periodic refresh uses a
-  Go `time.Ticker` plus `fyne.Do`, not hooks.
+- `internal/client/gui/window.go` is a useful counterexample: periodic refresh
+  uses a Go `time.Ticker` plus `fyne.Do`, not hooks.
 
 ---
 

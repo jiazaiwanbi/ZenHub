@@ -41,9 +41,9 @@ still no `src/`, `app/`, `web/`, or browser-oriented frontend tree.
 ## Module Organization
 
 - `cmd/gui/` owns the desktop binary entrypoint only.
-- `internal/gui/` owns Fyne-specific view/layout code.
-- `internal/app/` owns shared runtime bootstrap and read models consumed by the
-  GUI and the headless client.
+- `internal/client/gui/` owns Fyne-specific view/layout code.
+- `internal/client/app/` owns shared runtime bootstrap and read models
+  consumed by the GUI and the headless client.
 - New GUI files should extend these locations instead of mixing view code into
   routing, balancing, or protocol packages.
 
@@ -52,7 +52,7 @@ still no `src/`, `app/`, `web/`, or browser-oriented frontend tree.
 ## Naming Conventions
 
 - Keep the native shell entrypoint under `cmd/gui`.
-- Keep Fyne-specific widgets and window composition under `internal/gui`.
+- Keep Fyne-specific widgets and window composition under `internal/client/gui`.
 - Do not assume React/Next.js/Vite naming such as `components/`, `hooks/`, or
   `pages/` unless a later task actually introduces them.
 
@@ -61,4 +61,5 @@ still no `src/`, `app/`, `web/`, or browser-oriented frontend tree.
 ## Examples
 
 - Native GUI examples:
-  `cmd/gui/main.go`, `internal/gui/window.go`, and `internal/app/runtime.go`.
+  `cmd/gui/main.go`, `internal/client/gui/window.go`, and
+  `internal/client/app/runtime.go`.

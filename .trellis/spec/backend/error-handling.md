@@ -12,14 +12,14 @@ Errors are classified close to the layer that knows the failure semantics, then 
 ## Error Types
 
 - Sentinel errors:
-  - `internal/protocol/openai.ErrInvalidRequest`
-  - `internal/router.ErrNoRoute`
-  - `internal/balancer.ErrGroupNotFound`
-  - `internal/balancer.ErrNoHealthyNodes`
-  - `internal/executor.ErrRelayNotImplemented`
+  - `internal/core/protocol/openai.ErrInvalidRequest`
+  - `internal/core/router.ErrNoRoute`
+  - `internal/core/balancer.ErrGroupNotFound`
+  - `internal/core/balancer.ErrNoHealthyNodes`
+  - `internal/core/executor.ErrRelayNotImplemented`
 - Structured errors:
-  - `internal/executor.UpstreamError` for upstream HTTP failures
-  - `internal/executor.StreamError` for streaming failures with `Started` state
+  - `internal/core/executor.UpstreamError` for upstream HTTP failures
+  - `internal/core/executor.StreamError` for streaming failures with `Started` state
 
 Use `errors.Is` for sentinel behavior and `errors.As` when callers need upstream status/body details.
 
@@ -33,15 +33,15 @@ Use `errors.Is` for sentinel behavior and `errors.As` when callers need upstream
 - Trigger: Any change that affects request validation, route selection, load balancing, upstream execution, SSE streaming, or HTTP error responses.
 
 #### 2. Signatures
-- `internal/proxy.(*Service).ExecuteChat(context.Context, canonical.ChatRequest) (*canonical.ChatResponse, error)`
-- `internal/proxy.(*Service).StreamChat(context.Context, canonical.ChatRequest, func(canonical.StreamChunk) error) error`
-- `internal/server.writeMappedError(http.ResponseWriter, error)`
-- `internal/proxy.HTTPStatus(error) int`
+- `internal/core/proxy.(*Service).ExecuteChat(context.Context, canonical.ChatRequest) (*canonical.ChatResponse, error)`
+- `internal/core/proxy.(*Service).StreamChat(context.Context, canonical.ChatRequest, func(canonical.StreamChunk) error) error`
+- `internal/client/localhostapi.writeMappedError(http.ResponseWriter, error)`
+- `internal/core/proxy.HTTPStatus(error) int`
 
 #### 3. Contracts
 - Protocol parsing should return `ErrInvalidRequest`-wrapped errors with field-specific detail.
 - Router/balancer/executor layers should return typed errors and let callers decide the HTTP mapping.
-- `internal/proxy.Service` records observation metadata for both success and failure; it does not suppress the original error.
+- `internal/core/proxy.Service` records observation metadata for both success and failure; it does not suppress the original error.
 - Retry decisions are driven by `executor.IsRetryable(err)` and must stay within the selected provider group.
 - Streaming failures after bytes have already been sent must not be converted into a second JSON error body.
 

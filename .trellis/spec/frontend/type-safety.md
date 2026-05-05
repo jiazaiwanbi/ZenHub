@@ -11,10 +11,10 @@ system.
 
 The closest thing to a current contract source is the Go backend:
 
-- `internal/canonical/models.go` defines the canonical request/response structs.
-- `internal/protocol/openai/openai.go` validates and parses incoming
+- `internal/core/canonical/models.go` defines the canonical request/response structs.
+- `internal/core/protocol/openai/openai.go` validates and parses incoming
   OpenAI-compatible payloads.
-- `internal/app/runtime.go` defines the read-only GUI view models.
+- `internal/client/app/runtime.go` defines the read-only GUI view models.
 
 Those Go structs are the current UI contract source as well.
 
@@ -22,7 +22,8 @@ Those Go structs are the current UI contract source as well.
 
 ## Type Organization
 
-- Keep GUI-facing view models in Go near the shared runtime (`internal/app`).
+- Keep GUI-facing view models in Go near the shared client runtime
+  (`internal/client/app`).
 - Do not create speculative shared UI type modules outside the current Go code.
 
 ---
@@ -38,8 +39,8 @@ Those Go structs are the current UI contract source as well.
 
 ## Common Patterns
 
-- Use `internal/app.StatusView`, `RouteView`, and `RequestView` as the source
-  of truth for the current desktop shell.
+- Use `internal/client/app.StatusView`, `RouteView`, and `RequestView` as the
+  source of truth for the current desktop shell.
 - Avoid copying route/request fields into ad hoc GUI-only structs when the
   shared runtime already defines them.
 
@@ -47,7 +48,7 @@ Those Go structs are the current UI contract source as well.
 
 ## Examples
 
-- `internal/app/runtime.go` is the current GUI contract reference.
+- `internal/client/app/runtime.go` is the current GUI contract reference.
 - There are still no frontend `.ts` or `.tsx` type definitions in the repo.
 
 ---
@@ -55,6 +56,7 @@ Those Go structs are the current UI contract source as well.
 ## Forbidden Patterns
 
 - Claiming a TypeScript convention exists when there is no TypeScript in the repo.
-- Hand-copying GUI route/request structs instead of checking `internal/app`.
+- Hand-copying GUI route/request structs instead of checking
+  `internal/client/app`.
 - Introducing a frontend build pipeline solely to satisfy this spec; the spec
   must follow real code, not force speculative scaffolding.

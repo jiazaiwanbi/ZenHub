@@ -7,7 +7,7 @@
 ## Overview
 
 The backend follows a transport-to-core-to-provider split. Runnable shells stay
-thin, `internal/app` owns shared runtime bootstrap, HTTP handlers stay thin,
+thin, `internal/client/app` owns shared client runtime bootstrap, HTTP handlers stay thin,
 protocol parsing converts input into canonical models, the proxy service owns
 route/balance/execute orchestration, and provider-specific transport details
 stay below that boundary.
@@ -24,20 +24,25 @@ cmd/
     └── main.go
 
 internal/
-├── app/
-│   ├── runtime.go
-│   └── runtime_test.go
+├── client/
+│   ├── app/
+│   │   ├── runtime.go
+│   │   └── runtime_test.go
+│   ├── config/
+│   │   └── config.go
+│   ├── gui/
+│   │   └── window.go
+│   └── localhostapi/
+│       ├── server.go
+│       └── server_test.go
+└── core/
 ├── balancer/
 │   ├── balancer.go
 │   └── balancer_test.go
 ├── canonical/
 │   └── models.go
-├── config/
-│   └── config.go
 ├── executor/
 │   └── direct.go
-├── gui/
-│   └── window.go
 ├── observability/
 │   └── recorder.go
 ├── protocol/
@@ -71,51 +76,52 @@ internal/
 
 #### 2. Signatures
 - Entry points: `cmd/client/main.go`, `cmd/gui/main.go`
-- Shared bootstrap: `internal/app.NewRuntime(configPath string) (*Runtime, error)`
-- HTTP boundary: `internal/server.New(service ChatService) http.Handler`
-- Protocol ingress: `internal/protocol/openai.ParseChatCompletion(io.Reader) (canonical.ChatRequest, error)`
-- Core orchestration: `internal/proxy.Service`
-- Route policy: `internal/router.Router`
-- Load balancing: `internal/balancer.Manager`
-- Provider execution: `internal/executor.Direct`
-- Provider serialization: `internal/transformer.OpenAIChatRequest(...)`
+- Shared client bootstrap: `internal/client/app.NewRuntime(configPath string) (*Runtime, error)`
+- Client localhost API boundary: `internal/client/localhostapi.New(service ChatService) http.Handler`
+- Protocol ingress: `internal/core/protocol/openai.ParseChatCompletion(io.Reader) (canonical.ChatRequest, error)`
+- Core orchestration: `internal/core/proxy.Service`
+- Route policy: `internal/core/router.Router`
+- Load balancing: `internal/core/balancer.Manager`
+- Provider execution: `internal/core/executor.Direct`
+- Provider serialization: `internal/core/transformer.OpenAIChatRequest(...)`
 
 #### 3. Contracts
 - `cmd/client` and `cmd/gui` stay thin. They parse flags, build the shared
   runtime, and hand off to headless or GUI lifecycle code.
-- `internal/app` owns config loading, dependency wiring, HTTP server startup,
-  and read-only runtime views shared by the CLI and GUI shells.
-- `internal/server` maps URLs and HTTP status codes. It should not choose nodes
-  or build upstream payloads.
-- `internal/protocol/openai` parses/writes OpenAI-compatible payloads and SSE framing.
-- `internal/canonical` defines protocol-neutral request/response structs shared
+- `internal/client/app` owns client config loading, dependency wiring, HTTP
+  server startup, and read-only runtime views shared by the headless and GUI
+  client shells.
+- `internal/client/localhostapi` maps the client-local URLs and HTTP status
+  codes. It should not choose nodes or build upstream payloads.
+- `internal/core/protocol/openai` parses/writes OpenAI-compatible payloads and SSE framing.
+- `internal/core/canonical` defines protocol-neutral request/response structs shared
   by router, executor, and transformer layers.
-- `internal/proxy` is the only place where route selection, node retries,
+- `internal/core/proxy` is the only place where route selection, node retries,
   executor calls, and observation recording come together.
-- `internal/router` decides `direct` vs `relay` and resolves provider groups.
+- `internal/core/router` decides `direct` vs `relay` and resolves provider groups.
   It must stay pure and config-driven.
-- `internal/balancer` owns node strategy, retry iteration inputs, and passive
+- `internal/core/balancer` owns node strategy, retry iteration inputs, and passive
   health state.
-- `internal/executor` performs upstream HTTP/SSE work. Provider transport code
+- `internal/core/executor` performs upstream HTTP/SSE work. Provider transport code
   belongs here, not in handlers.
-- `internal/gui` renders the native shell only. It must consume `internal/app`
+- `internal/client/gui` renders the native shell only. It must consume `internal/client/app`
   read models instead of re-implementing proxy logic.
-- `internal/transformer` rebuilds provider payloads from canonical models and
+- `internal/core/transformer` rebuilds provider payloads from canonical models and
   converts provider responses back into canonical structures.
 
 #### 4. Validation & Error Matrix
-- Need a new API route -> add it in `internal/server`, then call protocol/core
+- Need a new client-local API route -> add it in `internal/client/localhostapi`, then call protocol/core
   helpers rather than embedding logic inline.
 - Need a new external protocol -> add a new parser/writer package under
-  `internal/protocol`, then reuse `internal/proxy.Service`.
+  `internal/core/protocol`, then reuse `internal/core/proxy.Service`.
 - Need a new provider type -> add executor/transformer support under
-  `internal/executor` and `internal/transformer` without changing routing or
+  `internal/core/executor` and `internal/core/transformer` without changing routing or
   handler logic.
-- Need GUI/runtime read models -> place them in `internal/app`, not
-  `internal/proxy`.
+- Need GUI/runtime read models -> place them in `internal/client/app`, not
+  `internal/core/proxy`.
 
 #### 5. Good / Base / Bad Cases
-- Good: `internal/app` wires router/balancer/proxy/server once -> handler
+- Good: `internal/client/app` wires router/balancer/proxy/localhost API once -> handler
   parses request -> proxy service routes and balances -> executor sends
   upstream request -> protocol layer writes JSON/SSE response.
 - Base: `/v1/models` reads router state and returns protocol-compatible model
@@ -149,14 +155,15 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request, service ChatS
 ```
 
 Why: the project’s main extensibility promise is protocol/provider growth
-without rewriting the core dispatch path or duplicating logic in the GUI shell.
+without rewriting the shared core dispatch path or duplicating logic in the
+client GUI shell.
 
 ---
 
 ## Naming Conventions
 
-- Use singular package names for responsibilities: `app`, `router`, `balancer`,
-  `executor`, `transformer`, `server`, `gui`.
+- Use singular package names for responsibilities inside each namespace:
+  `app`, `localhostapi`, `router`, `balancer`, `executor`, `transformer`, `gui`.
 - Keep provider-specific code inside a shared responsibility package unless a
   second provider makes a subpackage split necessary.
 - Use `cmd/<binary>` for runnable entry points and `internal/<responsibility>`
@@ -166,10 +173,11 @@ without rewriting the core dispatch path or duplicating logic in the GUI shell.
 
 ## Examples
 
-- `internal/app/runtime.go` shows the shared bootstrap boundary for the
-  headless and GUI binaries.
-- `internal/server/server.go` shows the thin-handler pattern.
-- `internal/proxy/service.go` shows the orchestration boundary where routing,
+- `internal/client/app/runtime.go` shows the shared bootstrap boundary for the
+  headless and GUI client binaries.
+- `internal/client/localhostapi/server.go` shows the thin-handler pattern for
+  the client localhost API.
+- `internal/core/proxy/service.go` shows the orchestration boundary where routing,
   balancing, execution, and observation meet.
-- `internal/transformer/openai.go` shows provider serialization built from
+- `internal/core/transformer/openai.go` shows provider serialization built from
   canonical models rather than raw handler payloads.

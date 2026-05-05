@@ -18,8 +18,8 @@ These rules capture backend contracts that are easy to drift during fast iterati
 - Trigger: Cross-layer request handling that parses protocol input and later serializes an upstream provider payload.
 
 #### 2. Signatures
-- `internal/protocol/openai.ParseChatCompletion(io.Reader) (canonical.ChatRequest, error)`
-- `internal/transformer.OpenAIChatRequest(req canonical.ChatRequest, upstreamModel string, forceStream *bool) ([]byte, error)`
+- `internal/core/protocol/openai.ParseChatCompletion(io.Reader) (canonical.ChatRequest, error)`
+- `internal/core/transformer.OpenAIChatRequest(req canonical.ChatRequest, upstreamModel string, forceStream *bool) ([]byte, error)`
 
 #### 3. Contracts
 - Known OpenAI request fields: `model`, `messages`, `tools`, `temperature`, `top_p`, `max_tokens`, `stream`, `metadata`

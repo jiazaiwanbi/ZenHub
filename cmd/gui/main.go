@@ -4,8 +4,8 @@ import (
 	"flag"
 	"log"
 
-	appcore "zenhub/internal/app"
-	"zenhub/internal/gui"
+	appcore "zenhub/internal/client/app"
+	"zenhub/internal/client/gui"
 )
 
 func main() {
