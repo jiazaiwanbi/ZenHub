@@ -42,7 +42,7 @@ type ChatResponse struct {
 	FinishReason  string
 	Usage         *Usage
 	RawExtensions map[string]json.RawMessage
-	Raw            json.RawMessage
+	Raw           json.RawMessage
 }
 
 type StreamChunk struct {

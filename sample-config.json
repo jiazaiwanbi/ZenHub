@@ -1,0 +1,56 @@
+{
+  "listen": "127.0.0.1:8080",
+  "observability": {
+    "max_records": 200
+  },
+  "routes": [
+    {
+      "model": "gpt-4o-mini",
+      "mode": "direct",
+      "provider_group": "openai-direct",
+      "upstream_model": "gpt-4o-mini"
+    },
+    {
+      "model": "relay-placeholder",
+      "mode": "relay",
+      "provider_group": "relay-group"
+    }
+  ],
+  "provider_groups": [
+    {
+      "name": "openai-direct",
+      "strategy": "round_robin",
+      "timeout": "30s",
+      "retry_count": 1,
+      "max_node_attempts": 1,
+      "passive_health": {
+        "failure_threshold": 2,
+        "cooldown": "30s"
+      },
+      "nodes": [
+        {
+          "name": "openai-primary",
+          "base_url": "https://api.openai.com",
+          "api_key_env": "OPENAI_API_KEY"
+        }
+      ]
+    },
+    {
+      "name": "relay-group",
+      "strategy": "fill_first",
+      "timeout": "10s",
+      "retry_count": 0,
+      "max_node_attempts": 1,
+      "passive_health": {
+        "failure_threshold": 1,
+        "cooldown": "10s"
+      },
+      "nodes": [
+        {
+          "name": "relay-placeholder",
+          "base_url": "http://127.0.0.1:9999"
+        }
+      ]
+    }
+  ]
+}

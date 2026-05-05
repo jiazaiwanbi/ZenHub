@@ -19,7 +19,7 @@ const maxChatRequestBytes = 8 << 20
 var ErrInvalidRequest = errors.New("invalid OpenAI chat completions request")
 
 type chatRequestEnvelope struct {
-	Model       string          `json:"model"`
+	Model       string            `json:"model"`
 	Messages    []json.RawMessage `json:"messages"`
 	Tools       json.RawMessage   `json:"tools"`
 	Temperature *float64          `json:"temperature"`

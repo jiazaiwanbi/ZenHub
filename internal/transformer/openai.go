@@ -8,7 +8,7 @@ import (
 )
 
 func OpenAIChatRequest(req canonical.ChatRequest, upstreamModel string, forceStream *bool) ([]byte, error) {
-	fields := cloneRawMap(req.RawFields)
+	fields := cloneRawMap(req.RawExtensions)
 	if fields == nil {
 		fields = make(map[string]json.RawMessage)
 	}
@@ -23,13 +23,37 @@ func OpenAIChatRequest(req canonical.ChatRequest, upstreamModel string, forceStr
 	}
 	fields["model"] = modelJSON
 
-	if forceStream != nil {
-		streamJSON, err := json.Marshal(*forceStream)
-		if err != nil {
-			return nil, err
-		}
-		fields["stream"] = streamJSON
+	messagesJSON, err := marshalMessages(req.Messages)
+	if err != nil {
+		return nil, err
 	}
+	fields["messages"] = messagesJSON
+
+	if err := setOptionalRawField(fields, req.RawFields, "tools", req.Tools); err != nil {
+		return nil, err
+	}
+	if err := setOptionalJSONField(fields, req.RawFields, "temperature", req.Temperature); err != nil {
+		return nil, err
+	}
+	if err := setOptionalJSONField(fields, req.RawFields, "top_p", req.TopP); err != nil {
+		return nil, err
+	}
+	if err := setOptionalJSONField(fields, req.RawFields, "max_tokens", req.MaxTokens); err != nil {
+		return nil, err
+	}
+	if err := setOptionalJSONField(fields, req.RawFields, "metadata", req.Metadata); err != nil {
+		return nil, err
+	}
+
+	stream := req.Stream
+	if forceStream != nil {
+		stream = *forceStream
+	}
+	streamJSON, err := json.Marshal(stream)
+	if err != nil {
+		return nil, err
+	}
+	fields["stream"] = streamJSON
 
 	return json.Marshal(fields)
 }
@@ -121,6 +145,129 @@ func cloneRawMap(fields map[string]json.RawMessage) map[string]json.RawMessage {
 		copied[key] = append(json.RawMessage(nil), value...)
 	}
 	return copied
+}
+
+func cloneRaw(raw json.RawMessage) json.RawMessage {
+	if raw == nil {
+		return nil
+	}
+	return append(json.RawMessage(nil), raw...)
+}
+
+func marshalMessages(messages []canonical.Message) (json.RawMessage, error) {
+	rawMessages := make([]json.RawMessage, 0, len(messages))
+	for _, message := range messages {
+		rawMessage, err := marshalMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		rawMessages = append(rawMessages, rawMessage)
+	}
+	return json.Marshal(rawMessages)
+}
+
+func marshalMessage(message canonical.Message) (json.RawMessage, error) {
+	fields := messageExtensionFields(message.RawFields)
+	if fields == nil {
+		fields = make(map[string]json.RawMessage)
+	}
+
+	roleJSON, err := json.Marshal(message.Role)
+	if err != nil {
+		return nil, err
+	}
+	fields["role"] = roleJSON
+
+	if err := setOptionalRawField(fields, message.RawFields, "content", message.Content); err != nil {
+		return nil, err
+	}
+	if err := setOptionalJSONField(fields, message.RawFields, "name", message.Name); err != nil {
+		return nil, err
+	}
+	if err := setOptionalJSONField(fields, message.RawFields, "tool_call_id", message.ToolCallID); err != nil {
+		return nil, err
+	}
+	if err := setOptionalRawField(fields, message.RawFields, "tool_calls", message.ToolCalls); err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(fields)
+}
+
+func messageExtensionFields(fields map[string]json.RawMessage) map[string]json.RawMessage {
+	if fields == nil {
+		return nil
+	}
+
+	extensions := make(map[string]json.RawMessage)
+	for key, value := range fields {
+		if knownMessageFields()[key] {
+			continue
+		}
+		extensions[key] = cloneRaw(value)
+	}
+	return extensions
+}
+
+func knownMessageFields() map[string]bool {
+	return map[string]bool{
+		"role":         true,
+		"content":      true,
+		"name":         true,
+		"tool_call_id": true,
+		"tool_calls":   true,
+	}
+}
+
+func setOptionalRawField(
+	fields map[string]json.RawMessage,
+	rawFields map[string]json.RawMessage,
+	key string,
+	value json.RawMessage,
+) error {
+	if value != nil {
+		fields[key] = cloneRaw(value)
+		return nil
+	}
+	if rawValue, ok := rawFields[key]; ok {
+		fields[key] = cloneRaw(rawValue)
+		return nil
+	}
+	delete(fields, key)
+	return nil
+}
+
+func setOptionalJSONField(
+	fields map[string]json.RawMessage,
+	rawFields map[string]json.RawMessage,
+	key string,
+	value any,
+) error {
+	if shouldMarshalOptionalValue(value) {
+		rawValue, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		fields[key] = rawValue
+		return nil
+	}
+	if rawValue, ok := rawFields[key]; ok {
+		fields[key] = cloneRaw(rawValue)
+		return nil
+	}
+	delete(fields, key)
+	return nil
+}
+
+func shouldMarshalOptionalValue(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case string:
+		return typed != ""
+	default:
+		return true
+	}
 }
 
 func extensionFields(fields map[string]json.RawMessage, known map[string]bool) map[string]json.RawMessage {
