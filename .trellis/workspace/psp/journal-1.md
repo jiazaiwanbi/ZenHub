@@ -105,3 +105,37 @@ Added the first Fyne-based native desktop GUI slice as a single-process shell ov
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Core client server boundary refactor
+
+**Date**: 2026-05-05
+**Task**: Core client server boundary refactor
+**Branch**: `main`
+
+### Summary
+
+Refactored the repo into explicit shared core and client namespaces, moved the client localhost API out of the misleading server name, updated architecture specs, and preserved client and GUI behavior under the new boundaries.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2f7a64b` | (see git log) |
+| `ea75aec` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
