@@ -20,6 +20,11 @@ type Service struct {
 	direct   *executor.Direct
 	observer *observability.Recorder
 	now      func() time.Time
+	options  Options
+}
+
+type Options struct {
+	AllowRelay bool
 }
 
 func New(
@@ -27,6 +32,16 @@ func New(
 	balancerInstance *balancer.Manager,
 	directExecutor *executor.Direct,
 	observer *observability.Recorder,
+) (*Service, error) {
+	return NewWithOptions(routerInstance, balancerInstance, directExecutor, observer, Options{})
+}
+
+func NewWithOptions(
+	routerInstance *router.Router,
+	balancerInstance *balancer.Manager,
+	directExecutor *executor.Direct,
+	observer *observability.Recorder,
+	options Options,
 ) (*Service, error) {
 	if routerInstance == nil {
 		return nil, errors.New("router is required")
@@ -47,6 +62,7 @@ func New(
 		direct:   directExecutor,
 		observer: observer,
 		now:      time.Now,
+		options:  options,
 	}, nil
 }
 
@@ -103,7 +119,7 @@ func (s *Service) run(
 	}
 	record.RouteMode = string(decision.Mode)
 
-	if decision.Mode == router.RouteModeRelay {
+	if decision.Mode == router.RouteModeRelay && !s.options.AllowRelay {
 		err := executor.ErrRelayNotImplemented
 		finish("", "", 0, err)
 		return nil, err

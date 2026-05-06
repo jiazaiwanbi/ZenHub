@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review whether the first server/community code fits the documented architecture."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Review that the new server package layout is explicit and separate from client packages."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Review auth, sync, relay, and HTTP error behavior in the community server APIs."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Review the chosen storage boundary and whether it is documented honestly."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Review server logging behavior against current project conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review tests, contracts, and package boundaries in the first server slice."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review that server code reuses core instead of duplicating client-local logic."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review consistency across auth, sync, relay, storage, and shared core boundaries."}
+{"file": ".trellis/tasks/05-05-zenhub-community-server-foundation/research/current-core-reuse-and-server-scope.md", "reason": "Review the implementation against the intended community-server scope and core/client separation."}

@@ -6,118 +6,148 @@
 
 ## Overview
 
-No database layer exists in the repository today.
+The repository now has one explicit persistence layer: the open-source
+community server stores sync snapshots in MySQL under
+`internal/server/community/storage/mysql`.
 
-- There is no ORM or SQL query package under `internal/`.
-- There are no migrations, schema files, repository packages, or database tests.
-- Runtime state that might otherwise tempt people toward persistence currently
-  stays in memory, for example `internal/core/observability/recorder.go`.
-- Configuration is loaded from JSON via `internal/client/config/config.go` and
-  `sample-config.json`; it does not establish a database connection.
-
-This file exists to stop contributors and agents from inventing a persistence
-architecture that is not present in the codebase.
+- There is still no ORM in the repo; persistence uses `database/sql`.
+- Client product code is not database-backed. The desktop client still loads
+  config from JSON and keeps observability data in memory.
+- The MySQL adapter bootstraps its own initial schema through
+  `EnsureSchema(context.Context)`.
+- Persistence is product-scoped. `internal/core/` remains free of SQL calls.
 
 ---
 
 ## Current Reality
 
-- Request routing is config-driven, not database-driven.
-- Provider groups, routes, and API keys are resolved from JSON config at
-  process start in `config.Load(...)`.
-- Observability data is a bounded in-memory slice managed by
+- Client request routing is config-driven, not database-driven.
+- Community-server routing still executes from a config snapshot, but that
+  snapshot is loaded from MySQL rather than from a local JSON file.
+- Observability data remains a bounded in-memory slice managed by
   `observability.Recorder`; records disappear on process restart.
-- There is no transactional boundary anywhere in the current request path.
+- The current transactional boundary exists inside
+  `internal/server/community/storage/mysql.SaveSnapshot(...)` when a config
+  snapshot row and its relay-node projection rows are inserted together.
 
 ---
 
-## Scenario: Introducing Persistence To This Repo
+## Scenario: Community Server MySQL Persistence
 
 ### 1. Scope / Trigger
-- Trigger: A task needs durable storage for configuration, request records,
-  history, quotas, or any other data that must survive process restarts.
+- Trigger: A task needs durable server-side state such as config snapshots,
+  sync metadata, or future hosted-server records.
 
 ### 2. Signatures
-- Current config entry point: `internal/client/config.Load(path string) (Runtime, error)`
-- Current in-memory state holder: `internal/core/observability.NewRecorder(limit int) *Recorder`
-- Current request path has no repository or transaction interface.
+- MySQL adapter constructor:
+  `internal/server/community/storage/mysql.Open(dsn string) (*Store, error)`
+- Schema bootstrap:
+  `(*Store).EnsureSchema(context.Context) error`
+- Snapshot persistence:
+  `(*Store).SaveSnapshot(context.Context, runtimeconfig.Snapshot, string, time.Time) (storage.SnapshotRecord, error)`
+- Snapshot read path:
+  `(*Store).CurrentSnapshot(context.Context) (storage.SnapshotRecord, error)`
+- Sync metadata path:
+  `(*Store).SyncMeta(context.Context) (storage.SyncMeta, error)`
 
 ### 3. Contracts
 - Do not hide database access inside `internal/client/localhostapi`,
   `internal/core/router`, `internal/core/balancer`, `internal/core/executor`,
   or `internal/core/transformer`.
-- Any future persistence layer must be introduced as an explicit package with a
-  clear call site from higher-level orchestration code such as `internal/core/proxy`.
-- Migration tooling, schema ownership, and connection configuration are
-  currently undefined and must be documented at the same time the first real
-  database code lands.
-- Environment-based secret resolution should follow the existing config pattern
-  used for provider API keys (`APIKeyEnv` in `internal/client/config/config.go`).
+- Community-server DB access belongs under `internal/server/community/storage/`
+  and is wired from `internal/server/community/app`.
+- Required env contract for the current server product:
+  - `ZENHUB_SERVER_DATABASE_DSN`
+  - `ZENHUB_SERVER_ADMIN_USERNAME`
+  - `ZENHUB_SERVER_ADMIN_PASSWORD`
+  - `ZENHUB_SERVER_TOKEN_SECRET`
+  - optional: `ZENHUB_SERVER_LISTEN`, `ZENHUB_SERVER_TOKEN_TTL`, `ZENHUB_SERVER_BOOTSTRAP_CONFIG`
+- Current schema ownership:
+  - `config_snapshots`: versioned JSON snapshots plus hash and update time
+  - `sync_meta`: singleton pull/push timestamps
+  - `relay_nodes`: denormalized relay-node projection for each saved snapshot version
+- The current migration story is intentionally simple:
+  `EnsureSchema(...)` executes `CREATE TABLE IF NOT EXISTS` bootstrap
+  statements. If schema evolution beyond initial bootstrap is needed, add
+  explicit migration tooling in the same task.
 
 ### 4. Validation & Error Matrix
-- Need durable state, but no storage package exists -> create a dedicated
-  package and extend this spec in the same task.
+- Missing or blank MySQL DSN -> runtime construction error
+- MySQL ping failure -> runtime construction error
+- No saved snapshot yet -> `storage.ErrSnapshotNotFound`
+- Malformed persisted snapshot JSON -> storage read error
+- Need durable state outside the current community-server scope -> add a
+  dedicated product-scoped storage package and update this spec in the same task
 - Need quick local persistence and want to write directly from a handler ->
-  reject; keep I/O out of `internal/client/localhostapi`.
-- Need schema evolution support -> add migration tooling before shipping schema
-  changes to multiple environments.
-- Need retry or routing state to survive restarts -> document exactly which
-  package owns that persistence boundary instead of extending unrelated structs.
+  reject; keep I/O out of HTTP handlers
+- Need schema evolution beyond bootstrap DDL -> add migration tooling before
+  shipping multiple schema generations
 
 ### 5. Good / Base / Bad Cases
-- Good: a future task introduces an explicit persistence package, wiring,
-  tests, and spec updates in one change.
-- Base: state stays in memory because the feature does not require durability.
-- Bad: add ad hoc SQLite or SQL calls directly inside handlers, routers, or
-  executors because "it was faster".
+- Good: `internal/server/community/app` opens MySQL once, calls
+  `EnsureSchema(...)`, and the sync service uses the store interface to read or
+  save snapshots.
+- Base: state that does not need durability stays in memory, for example
+  `internal/core/observability.Recorder`.
+- Bad: add ad hoc SQL calls directly inside handlers, routers, or executors
+  because "it was faster".
 
 ### 6. Tests Required
-- When a database is added, include config parsing tests, integration tests for
-  the persistence package, and migration coverage where applicable.
-- Until then, there are no database-specific tests to run because the layer
-  does not exist.
+- MySQL adapter tests for schema bootstrap statements and snapshot save/load
+  behavior.
+- Sync-service tests for conflict rules on top of the storage interface.
+- API tests proving push/pull/models/relay behavior against a store-backed
+  server handler.
 
 ### 7. Wrong vs Correct
 #### Wrong
 ```go
-func handleChatCompletions(w http.ResponseWriter, r *http.Request, service ChatService) {
-    db.Exec("INSERT INTO requests ...")
+func handlePush(w http.ResponseWriter, r *http.Request) {
+    db.Exec("INSERT INTO config_snapshots ...")
 }
 ```
 
 #### Correct
 ```go
-service, err := proxy.New(routerInstance, balancerInstance, directExecutor, observer)
+store, err := mysqlstorage.Open(cfg.DatabaseDSN)
+syncService := communitysync.NewService(store)
 ```
 
 Why: the current architecture keeps transport, routing, execution, and
-observability concerns separate. Persistence should arrive as a new explicit
-dependency, not as hidden side effects inside existing packages.
+observability concerns separate. Persistence belongs to an explicit
+product-scoped dependency, not to handlers or shared core packages.
 
 ---
 
 ## Naming Conventions
 
-No database naming conventions are established yet because there are no tables,
-columns, indexes, or migrations in the repo.
+- Use singular package names for storage responsibilities: `storage`,
+  `storage/mysql`, `storage/memory`.
+- Use `*_at` for UTC millisecond timestamp columns stored as `BIGINT`.
+- Use `*_json` for JSON blob columns and `*_hash` for canonical snapshot hashes.
 
 ---
 
 ## Examples
 
-- `internal/client/config/config.go` shows that runtime configuration is loaded from a
-  JSON file rather than persistent storage.
-- `internal/core/observability/recorder.go` shows the only implemented state store:
-  a bounded in-memory recorder.
-- `sample-config.json` is the concrete example of how routes and provider
-  groups are configured today.
+- `internal/server/community/storage/mysql/store.go` shows the explicit MySQL
+  persistence boundary.
+- `internal/server/community/storage/mysql/store_test.go` shows the expected
+  schema bootstrap and snapshot save/load behavior.
+- `internal/server/community/storage/memory/store.go` shows the in-memory test
+  implementation used by sync and API tests.
+- `internal/core/runtimeconfig/config.go` shows the shared config snapshot
+  model that is serialized into MySQL.
 
 ---
 
 ## Common Mistakes
 
-- Treating future database ideas in planning docs as if a persistence layer
-  already exists in this repo.
+- Treating the community-server MySQL layer as if it were a generic shared
+  persistence abstraction for all products.
 - Adding durable-state requirements without updating this spec and the relevant
   Trellis task manifests.
 - Coupling storage access to HTTP handlers or low-level transport packages.
+- Reusing `internal/client/config` as if it were a server storage layer instead
+  of going through `internal/core/runtimeconfig` plus
+  `internal/server/community/storage`.

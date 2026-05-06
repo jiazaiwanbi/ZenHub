@@ -7,8 +7,8 @@
 ## Overview
 
 The current runtime uses the Go standard library `log` package only at process
-startup and fatal failure boundaries in `cmd/client/main.go` and
-`cmd/gui/main.go`.
+startup and fatal failure boundaries in `cmd/client/main.go`,
+`cmd/gui/main.go`, and `cmd/server-community/main.go`.
 
 Request-level telemetry is not emitted through a shared logger. Instead, the
 proxy service records bounded request metadata in memory through
@@ -22,10 +22,11 @@ or assume one exists.
 ## Log Levels
 
 - `log.Printf`: use for coarse process lifecycle messages at the entry point.
-  Current example: announcing the listen address in `cmd/client/main.go`.
+  Current examples: announcing the listen address in `cmd/client/main.go` and
+  `cmd/server-community/main.go`.
 - `log.Fatal` / `log.Fatalf`: use only for unrecoverable startup and server
   failures in `main()`, such as missing config, invalid wiring, runtime start
-  failure, or GUI bootstrap failure.
+  failure, GUI bootstrap failure, or MySQL bootstrap failure.
 - Package code under `internal/` should usually return errors upward instead of
   logging them locally. Error classification and HTTP mapping already happen in
   `internal/core/proxy` and `internal/client/localhostapi`.
@@ -73,8 +74,8 @@ if err != nil {
 
 ## Examples
 
-- `cmd/client/main.go` and `cmd/gui/main.go` are the only places currently
-  using `log`.
+- `cmd/client/main.go`, `cmd/gui/main.go`, and `cmd/server-community/main.go`
+  are the only places currently using `log`.
 - `internal/core/proxy/service.go` records request outcome metadata instead of
   printing request-scoped logs.
 - `internal/core/observability/recorder.go` shows the in-memory record schema.

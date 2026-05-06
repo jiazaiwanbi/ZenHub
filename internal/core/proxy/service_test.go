@@ -191,6 +191,61 @@ func TestServiceRelayRouteReturnsNotImplemented(t *testing.T) {
 	}
 }
 
+func TestServiceRelayRouteCanBeEnabledForServerProducts(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"resp_1","model":"upstream-model","choices":[{"message":{"role":"assistant","content":"relay ok"},"finish_reason":"stop"}]}`)
+	}))
+	defer upstream.Close()
+
+	routerInstance, err := router.New([]router.Rule{
+		{Model: "relay-model", Mode: router.RouteModeRelay, ProviderGroup: "relay", UpstreamModel: "upstream-model"},
+	})
+	if err != nil {
+		t.Fatalf("router.New() error = %v", err)
+	}
+
+	balancerInstance, err := balancer.New([]balancer.Group{
+		{
+			Name:            "relay",
+			Strategy:        balancer.StrategyRoundRobin,
+			Timeout:         2 * time.Second,
+			RetryCount:      0,
+			MaxNodeAttempts: 1,
+			PassiveHealth: balancer.PassiveHealth{
+				FailureThreshold: 1,
+				Cooldown:         time.Second,
+			},
+			Nodes: []balancer.Node{
+				{Name: "relay-upstream", BaseURL: upstream.URL},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("balancer.New() error = %v", err)
+	}
+
+	service, err := NewWithOptions(
+		routerInstance,
+		balancerInstance,
+		executor.NewDirect(&http.Client{}),
+		nil,
+		Options{AllowRelay: true},
+	)
+	if err != nil {
+		t.Fatalf("NewWithOptions() error = %v", err)
+	}
+
+	request := mustParseRequest(t, `{"model":"relay-model","messages":[{"role":"user","content":"hello"}]}`)
+	response, err := service.ExecuteChat(t.Context(), request)
+	if err != nil {
+		t.Fatalf("ExecuteChat() error = %v", err)
+	}
+	if response.Model != "upstream-model" {
+		t.Fatalf("response.Model = %q, want upstream-model", response.Model)
+	}
+}
+
 func newTestService(t *testing.T, rules []router.Rule, groups []balancer.Group) *Service {
 	t.Helper()
 

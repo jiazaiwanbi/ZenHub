@@ -6,17 +6,19 @@
 
 ## Overview
 
-The implemented product today is a Go backend with two runnable shells:
-`cmd/client/main.go` for the headless proxy and `cmd/gui/main.go` for the
-native desktop shell. Shared runtime wiring lives in
-`internal/client/app/runtime.go`,
-application logic lives under `internal/`, and the request path is split into
-protocol parsing, canonical models, routing, balancing, execution,
-transformation, and observability packages.
+The implemented product today is a Go backend with three runnable shells:
+`cmd/client/main.go` for the headless proxy, `cmd/gui/main.go` for the native
+desktop shell, and `cmd/server-community/main.go` for the open-source
+community server. Shared request-path wiring lives under `internal/core/`,
+client product code lives under `internal/client/`, community-server product
+code lives under `internal/server/community/`, and the request path is split
+into protocol parsing, canonical models, routing, balancing, execution,
+transformation, persistence, and observability packages.
 
 These guides are intentionally grounded in the current codebase. They document
-the architecture that exists now, including gaps such as the absence of a
-database layer or shared structured logger.
+the architecture that exists now, including current gaps such as the absence of
+a shared structured logger and the fact that database-backed persistence exists
+only for the community-server product line.
 
 ---
 
@@ -61,8 +63,8 @@ database layer or shared structured logger.
 ## Quality Check
 
 - [ ] The described package layout still matches `cmd/` and `internal/`.
-- [ ] Database guidance still says no persistence layer exists unless code in
-  the same task introduces one.
+- [ ] Database guidance matches the current MySQL-backed community-server
+  persistence layer and does not imply that client code is database-backed.
 - [ ] Logging guidance still reflects standard-library `log` in
   `cmd/client/main.go` and `cmd/gui/main.go`, plus in-memory observability
   records, not a made-up structured logger.
