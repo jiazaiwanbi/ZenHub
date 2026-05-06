@@ -1,7 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for quality review."}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify the new package layout follows the agreed backend structure."}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify API and execution errors are propagated clearly."}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review tests, forbidden patterns, and maintainability."}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check that shared abstractions are reused instead of duplicated."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check consistency across handler, canonical, router, balancer, executor, and observability layers."}
-{"file": ".trellis/tasks/05-04-zenhub-local-proxy-core/research/proxy-chain-reference.md", "reason": "Check the implementation preserves the reference proxy chain boundaries."}

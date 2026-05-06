@@ -1,9 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "Overall backend architecture rules apply to the first real server product line."}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "This task introduces explicit server package namespaces and must keep product boundaries clear."}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "The first server APIs need consistent auth, sync, relay, and HTTP error mapping."}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Community server storage direction and persistence boundaries are central to this task."}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Server startup and API behavior should follow the current logging and observability rules until a real shared logger exists."}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "The first server slice changes architecture significantly and needs strong contract/test discipline."}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "The task must reuse core rather than copying client-local logic into server code."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The server slice spans auth, sync contracts, relay path, storage, and shared core boundaries."}
-{"file": ".trellis/tasks/05-05-zenhub-community-server-foundation/research/current-core-reuse-and-server-scope.md", "reason": "Captures the intended server scope and the core-versus-client reuse boundary for this first server product task."}

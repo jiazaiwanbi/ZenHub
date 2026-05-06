@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "Review whether the documented architecture and the refactored package layout still match."}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Review that moved packages are reflected accurately in the documented backend structure."}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Review that package moves preserve typed error propagation across the runtime and localhost API boundaries."}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Review that logging behavior is still truthful after moving client runtime packages."}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review tests and contract preservation through the refactor."}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review that shared logic moved into core rather than being copied into client-specific namespaces."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review the boundary shifts across binaries, runtime, localhost API, and shared core packages."}
-{"file": ".trellis/tasks/05-05-zenhub-core-client-server-boundaries/research/current-package-mapping.md", "reason": "Review the implementation against the agreed package mapping and client/server separation rule."}
