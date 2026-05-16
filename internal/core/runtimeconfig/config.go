@@ -1,6 +1,7 @@
 package runtimeconfig
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +29,8 @@ type File struct {
 	Routes         []Route             `json:"routes"`
 	ProviderGroups []ProviderGroup     `json:"provider_groups"`
 	Observability  ObservabilityConfig `json:"observability"`
+	Sync           SyncConfig          `json:"sync"`
+	Codex          CodexSettings       `json:"codex,omitempty"`
 }
 
 type Snapshot struct {
@@ -43,13 +46,24 @@ type Route struct {
 }
 
 type ProviderGroup struct {
-	Name            string              `json:"name"`
-	Strategy        string              `json:"strategy"`
-	Timeout         Duration            `json:"timeout"`
-	RetryCount      int                 `json:"retry_count"`
-	MaxNodeAttempts int                 `json:"max_node_attempts"`
-	PassiveHealth   PassiveHealthConfig `json:"passive_health"`
-	Nodes           []Node              `json:"nodes"`
+	Name            string               `json:"name"`
+	Strategy        string               `json:"strategy"`
+	Timeout         Duration             `json:"timeout"`
+	RetryCount      int                  `json:"retry_count"`
+	MaxNodeAttempts int                  `json:"max_node_attempts"`
+	PassiveHealth   PassiveHealthConfig  `json:"passive_health"`
+	Nodes           []Node               `json:"nodes"`
+	Codex           *CodexProviderConfig `json:"codex,omitempty"`
+}
+
+type CodexSettings struct {
+	ConfigDir            string `json:"config_dir,omitempty"`
+	CurrentProviderGroup string `json:"current_provider_group,omitempty"`
+}
+
+type CodexProviderConfig struct {
+	Auth   json.RawMessage `json:"auth,omitempty"`
+	Config string          `json:"config,omitempty"`
 }
 
 type PassiveHealthConfig struct {
@@ -67,6 +81,15 @@ type Node struct {
 
 type ObservabilityConfig struct {
 	MaxRecords int `json:"max_records"`
+}
+
+type SyncConfig struct {
+	Enabled     bool   `json:"enabled"`
+	ServerURL   string `json:"server_url"`
+	Username    string `json:"username"`
+	UsernameEnv string `json:"username_env"`
+	Password    string `json:"password"`
+	PasswordEnv string `json:"password_env"`
 }
 
 type Runtime struct {
@@ -249,4 +272,14 @@ func cloneHeaders(headers map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func HashSnapshot(snapshot Snapshot) (string, error) {
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return "", fmt.Errorf("marshal snapshot for hashing: %w", err)
+	}
+
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("%x", sum[:]), nil
 }

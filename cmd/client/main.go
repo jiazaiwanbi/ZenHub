@@ -10,6 +10,7 @@ import (
 	"time"
 
 	appcore "zenhub/internal/client/app"
+	clientconfig "zenhub/internal/client/config"
 )
 
 func main() {
@@ -17,9 +18,15 @@ func main() {
 	flag.StringVar(&configPath, "config", "", "path to the client config file")
 	flag.Parse()
 
-	if configPath == "" {
-		log.Fatal("-config is required")
+	paths, created, err := clientconfig.ResolveOrCreateClientConfig(configPath)
+	if err != nil {
+		log.Fatalf("resolve client config: %v", err)
 	}
+	configPath = paths.ConfigPath
+	if created {
+		log.Printf("created starter client config at %s", configPath)
+	}
+	log.Printf("using client config %s", configPath)
 
 	runtime, err := appcore.NewRuntime(configPath)
 	if err != nil {

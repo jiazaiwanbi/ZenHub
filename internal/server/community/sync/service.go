@@ -2,9 +2,6 @@ package sync
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -221,13 +218,7 @@ func (s *Service) saveSnapshot(
 }
 
 func HashSnapshot(snapshot runtimeconfig.Snapshot) (string, error) {
-	raw, err := json.Marshal(snapshot)
-	if err != nil {
-		return "", fmt.Errorf("marshal snapshot for hashing: %w", err)
-	}
-
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:]), nil
+	return runtimeconfig.HashSnapshot(snapshot)
 }
 
 func pullResponse(status string, record communitystorage.SnapshotRecord, snapshot *runtimeconfig.Snapshot) PullResponse {

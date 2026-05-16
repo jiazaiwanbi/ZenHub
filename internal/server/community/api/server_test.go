@@ -57,14 +57,14 @@ func TestCommunityServerLoginSyncModelsAndRelay(t *testing.T) {
 		Routes: []runtimeconfig.Route{
 			{
 				Model:         "relay-model",
-				Mode:          "relay",
-				ProviderGroup: "relay",
+				Mode:          "direct",
+				ProviderGroup: "upstream",
 				UpstreamModel: "upstream-model",
 			},
 		},
 		ProviderGroups: []runtimeconfig.ProviderGroup{
 			{
-				Name:            "relay",
+				Name:            "upstream",
 				Strategy:        "round_robin",
 				Timeout:         runtimeconfig.Duration{Duration: 2 * time.Second},
 				RetryCount:      0,
@@ -151,6 +151,45 @@ func TestCommunityServerLoginSyncModelsAndRelay(t *testing.T) {
 		}
 		if pullResponse.Status != communitysync.StatusUpToDate {
 			t.Fatalf("pull response = %#v", pullResponse)
+		}
+	})
+
+	t.Run("catalog_providers", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := jsonRequest(t, http.MethodGet, "/api/v1/catalog/providers", nil, token)
+
+		handler.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("catalog providers status = %d body=%s", recorder.Code, recorder.Body.String())
+		}
+
+		var response struct {
+			Version        int64  `json:"version"`
+			CloudUpdatedAt int64  `json:"cloud_updated_at"`
+			CloudHash      string `json:"cloud_hash"`
+			ProviderGroups []struct {
+				Name  string `json:"name"`
+				Nodes []struct {
+					Name    string `json:"name"`
+					BaseURL string `json:"base_url"`
+				} `json:"nodes"`
+			} `json:"provider_groups"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatalf("decode catalog providers response: %v", err)
+		}
+		if response.Version == 0 || response.CloudUpdatedAt == 0 || response.CloudHash != hash {
+			t.Fatalf("catalog providers metadata = %#v", response)
+		}
+		if len(response.ProviderGroups) != 1 {
+			t.Fatalf("provider groups len = %d, want 1", len(response.ProviderGroups))
+		}
+		if response.ProviderGroups[0].Name != "upstream" {
+			t.Fatalf("provider group name = %q, want upstream", response.ProviderGroups[0].Name)
+		}
+		if len(response.ProviderGroups[0].Nodes) != 1 || response.ProviderGroups[0].Nodes[0].BaseURL != upstream.URL {
+			t.Fatalf("provider group nodes = %#v", response.ProviderGroups[0].Nodes)
 		}
 	})
 

@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"zenhub/internal/core/balancer"
@@ -9,12 +10,20 @@ import (
 	"zenhub/internal/core/executor"
 	"zenhub/internal/core/proxy"
 	"zenhub/internal/core/router"
+	"zenhub/internal/core/runtimeconfig"
 	"zenhub/internal/server/community/storage"
 )
 
 type Service struct {
 	store      storage.Store
 	httpClient *http.Client
+}
+
+type ProviderCatalog struct {
+	Version        int64
+	CloudUpdatedAt int64
+	CloudHash      string
+	ProviderGroups []runtimeconfig.ProviderGroup
 }
 
 func NewService(store storage.Store, httpClient *http.Client) *Service {
@@ -33,6 +42,20 @@ func (s *Service) Models(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return service.Models(), nil
+}
+
+func (s *Service) ProviderCatalog(ctx context.Context) (ProviderCatalog, error) {
+	record, err := s.store.CurrentSnapshot(ctx)
+	if err != nil {
+		return ProviderCatalog{}, err
+	}
+
+	return ProviderCatalog{
+		Version:        record.Version,
+		CloudUpdatedAt: record.UpdatedAt.UnixMilli(),
+		CloudHash:      record.Hash,
+		ProviderGroups: cloneProviderGroups(record.Snapshot.ProviderGroups),
+	}, nil
 }
 
 func (s *Service) ExecuteChat(ctx context.Context, req canonical.ChatRequest) (*canonical.ChatResponse, error) {
@@ -76,11 +99,31 @@ func (s *Service) loadProxy(ctx context.Context) (*proxy.Service, error) {
 		return nil, err
 	}
 
-	return proxy.NewWithOptions(
+	return proxy.New(
 		routerInstance,
 		balancerInstance,
 		executor.NewDirect(s.httpClient),
 		nil,
-		proxy.Options{AllowRelay: true},
 	)
+}
+
+func cloneProviderGroups(groups []runtimeconfig.ProviderGroup) []runtimeconfig.ProviderGroup {
+	cloned := cloneSnapshot(runtimeconfig.Snapshot{ProviderGroups: groups})
+	if cloned == nil {
+		return nil
+	}
+	return cloned.ProviderGroups
+}
+
+func cloneSnapshot(snapshot runtimeconfig.Snapshot) *runtimeconfig.Snapshot {
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil
+	}
+
+	var cloned runtimeconfig.Snapshot
+	if err := json.Unmarshal(raw, &cloned); err != nil {
+		return nil
+	}
+	return &cloned
 }

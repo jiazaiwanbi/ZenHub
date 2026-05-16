@@ -17,20 +17,27 @@ import (
 type Service struct {
 	router   *router.Router
 	balancer *balancer.Manager
-	direct   *executor.Direct
+	direct   ChatExecutor
+	relay    ChatExecutor
 	observer *observability.Recorder
 	now      func() time.Time
 	options  Options
 }
 
+type ChatExecutor interface {
+	Execute(context.Context, balancer.Group, router.Decision, balancer.Node, canonical.ChatRequest) (*canonical.ChatResponse, error)
+	Stream(context.Context, balancer.Group, router.Decision, balancer.Node, canonical.ChatRequest, func(canonical.StreamChunk) error) error
+}
+
 type Options struct {
-	AllowRelay bool
+	AllowRelay    bool
+	RelayExecutor ChatExecutor
 }
 
 func New(
 	routerInstance *router.Router,
 	balancerInstance *balancer.Manager,
-	directExecutor *executor.Direct,
+	directExecutor ChatExecutor,
 	observer *observability.Recorder,
 ) (*Service, error) {
 	return NewWithOptions(routerInstance, balancerInstance, directExecutor, observer, Options{})
@@ -39,7 +46,7 @@ func New(
 func NewWithOptions(
 	routerInstance *router.Router,
 	balancerInstance *balancer.Manager,
-	directExecutor *executor.Direct,
+	directExecutor ChatExecutor,
 	observer *observability.Recorder,
 	options Options,
 ) (*Service, error) {
@@ -60,6 +67,7 @@ func NewWithOptions(
 		router:   routerInstance,
 		balancer: balancerInstance,
 		direct:   directExecutor,
+		relay:    options.RelayExecutor,
 		observer: observer,
 		now:      time.Now,
 		options:  options,
@@ -119,7 +127,8 @@ func (s *Service) run(
 	}
 	record.RouteMode = string(decision.Mode)
 
-	if decision.Mode == router.RouteModeRelay && !s.options.AllowRelay {
+	exec := s.executorForMode(decision.Mode)
+	if exec == nil {
 		err := executor.ErrRelayNotImplemented
 		finish("", "", 0, err)
 		return nil, err
@@ -148,7 +157,7 @@ func (s *Service) run(
 
 		for retry := 0; retry <= group.RetryCount; retry++ {
 			if yield == nil {
-				response, executeErr := s.direct.Execute(ctx, group, decision, selection.Node, req)
+				response, executeErr := exec.Execute(ctx, group, decision, selection.Node, req)
 				if executeErr == nil {
 					s.balancer.ReportSuccess(group.Name, selection.Node.Name)
 					finish(selectedNode, group.Strategy, retryCount, nil)
@@ -156,7 +165,7 @@ func (s *Service) run(
 				}
 				lastErr = executeErr
 			} else {
-				streamErr := s.direct.Stream(ctx, group, decision, selection.Node, req, yield)
+				streamErr := exec.Stream(ctx, group, decision, selection.Node, req, yield)
 				if streamErr == nil {
 					s.balancer.ReportSuccess(group.Name, selection.Node.Name)
 					finish(selectedNode, group.Strategy, retryCount, nil)
@@ -188,6 +197,20 @@ func (s *Service) run(
 	}
 	finish(selectedNode, group.Strategy, retryCount, lastErr)
 	return nil, lastErr
+}
+
+func (s *Service) executorForMode(mode router.RouteMode) ChatExecutor {
+	switch mode {
+	case router.RouteModeDirect:
+		return s.direct
+	case router.RouteModeRelay:
+		if !s.options.AllowRelay {
+			return nil
+		}
+		return s.relay
+	default:
+		return nil
+	}
 }
 
 func classifyError(err error) string {

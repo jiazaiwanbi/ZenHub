@@ -13,10 +13,13 @@ import (
 	"zenhub/internal/server/community/api"
 	"zenhub/internal/server/community/auth"
 	"zenhub/internal/server/community/config"
+	"zenhub/internal/server/community/controlgrpc"
 	"zenhub/internal/server/community/relay"
 	communitystorage "zenhub/internal/server/community/storage"
 	mysqlstorage "zenhub/internal/server/community/storage/mysql"
 	communitysync "zenhub/internal/server/community/sync"
+
+	"google.golang.org/grpc"
 )
 
 const readHeaderTimeout = 5 * time.Second
@@ -28,6 +31,7 @@ type Runtime struct {
 	sync          *communitysync.Service
 	relay         *relay.Service
 	store         communitystorage.Store
+	grpcServer    *grpc.Server
 	httpServer    *http.Server
 	listener      net.Listener
 	listenAddress string
@@ -86,9 +90,11 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	}
 
 	relayService := relay.NewService(store, &http.Client{})
+	grpcServer := controlgrpc.NewServer(authService, syncService, relayService)
+	httpHandler := api.New(authService, syncService, relayService)
 	httpServer := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           api.New(authService, syncService, relayService),
+		Handler:           controlgrpc.NewMixedHandler(httpHandler, grpcServer),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
@@ -99,6 +105,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 		sync:          syncService,
 		relay:         relayService,
 		store:         store,
+		grpcServer:    grpcServer,
 		httpServer:    httpServer,
 		listenAddress: cfg.Listen,
 	}, nil
@@ -154,9 +161,13 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 	}
 
 	shutdownErr := serverInstance.Shutdown(ctx)
+	grpcErr := r.stopGRPC(ctx)
 	closeErr := r.closeStore()
 	if shutdownErr != nil {
 		return shutdownErr
+	}
+	if grpcErr != nil {
+		return grpcErr
 	}
 	return closeErr
 }
@@ -193,6 +204,26 @@ func (r *Runtime) closeStore() error {
 		r.closeErr = r.store.Close()
 	})
 	return r.closeErr
+}
+
+func (r *Runtime) stopGRPC(ctx context.Context) error {
+	if r.grpcServer == nil {
+		return nil
+	}
+
+	done := make(chan struct{})
+	go func() {
+		r.grpcServer.GracefulStop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		r.grpcServer.Stop()
+		return ctx.Err()
+	}
 }
 
 func millisToTime(value int64) time.Time {

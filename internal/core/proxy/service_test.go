@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -191,12 +192,28 @@ func TestServiceRelayRouteReturnsNotImplemented(t *testing.T) {
 	}
 }
 
-func TestServiceRelayRouteCanBeEnabledForServerProducts(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestServiceRelayRouteUsesRelayExecutor(t *testing.T) {
+	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/relay/chat/completions" {
+			t.Fatalf("unexpected relay path %q", r.URL.Path)
+		}
+
+		if got := r.Header.Get("Authorization"); got != "Bearer relay-token" {
+			t.Fatalf("Authorization = %q, want Bearer relay-token", got)
+		}
+
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode relay payload: %v", err)
+		}
+		if got := payload["model"]; got != "relay-model" {
+			t.Fatalf("payload model = %#v, want relay-model", got)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"id":"resp_1","model":"upstream-model","choices":[{"message":{"role":"assistant","content":"relay ok"},"finish_reason":"stop"}]}`)
 	}))
-	defer upstream.Close()
+	defer relay.Close()
 
 	routerInstance, err := router.New([]router.Rule{
 		{Model: "relay-model", Mode: router.RouteModeRelay, ProviderGroup: "relay", UpstreamModel: "upstream-model"},
@@ -217,7 +234,7 @@ func TestServiceRelayRouteCanBeEnabledForServerProducts(t *testing.T) {
 				Cooldown:         time.Second,
 			},
 			Nodes: []balancer.Node{
-				{Name: "relay-upstream", BaseURL: upstream.URL},
+				{Name: "relay-gateway", BaseURL: relay.URL, APIKey: "relay-token"},
 			},
 		},
 	})
@@ -230,7 +247,10 @@ func TestServiceRelayRouteCanBeEnabledForServerProducts(t *testing.T) {
 		balancerInstance,
 		executor.NewDirect(&http.Client{}),
 		nil,
-		Options{AllowRelay: true},
+		Options{
+			AllowRelay:    true,
+			RelayExecutor: executor.NewRelay(&http.Client{}),
+		},
 	)
 	if err != nil {
 		t.Fatalf("NewWithOptions() error = %v", err)

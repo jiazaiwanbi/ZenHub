@@ -3,6 +3,16 @@
   "observability": {
     "max_records": 200
   },
+  "sync": {
+    "enabled": false,
+    "server_url": "http://127.0.0.1:8081",
+    "username": "admin",
+    "password_env": "ZENHUB_COMMUNITY_PASSWORD"
+  },
+  "codex": {
+    "config_dir": "/path/to/.codex",
+    "current_provider_group": "openai-direct"
+  },
   "routes": [
     {
       "model": "gpt-4o-mini",
@@ -11,9 +21,9 @@
       "upstream_model": "gpt-4o-mini"
     },
     {
-      "model": "relay-placeholder",
+      "model": "relay-model",
       "mode": "relay",
-      "provider_group": "relay-group"
+      "provider_group": "community-relay"
     }
   ],
   "provider_groups": [
@@ -33,10 +43,16 @@
           "base_url": "https://api.openai.com",
           "api_key_env": "OPENAI_API_KEY"
         }
-      ]
+      ],
+      "codex": {
+        "auth": {
+          "OPENAI_API_KEY": "env:OPENAI_API_KEY"
+        },
+        "config": "model_provider = \"openai-direct\"\n\n[model_providers.openai-direct]\nbase_url = \"https://api.openai.com\"\nwire_api = \"responses\"\n"
+      }
     },
     {
-      "name": "relay-group",
+      "name": "community-relay",
       "strategy": "fill_first",
       "timeout": "10s",
       "retry_count": 0,
@@ -47,10 +63,17 @@
       },
       "nodes": [
         {
-          "name": "relay-placeholder",
-          "base_url": "http://127.0.0.1:9999"
+          "name": "community-primary",
+          "base_url": "http://127.0.0.1:8081",
+          "api_key_env": "ZENHUB_COMMUNITY_TOKEN"
         }
-      ]
+      ],
+      "codex": {
+        "auth": {
+          "ZENHUB_COMMUNITY_TOKEN": "env:ZENHUB_COMMUNITY_TOKEN"
+        },
+        "config": "model_provider = \"community-relay\"\n\n[model_providers.community-relay]\nbase_url = \"http://127.0.0.1:8081\"\nwire_api = \"chat_completions\"\n"
+      }
     }
   ]
 }

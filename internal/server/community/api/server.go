@@ -31,6 +31,7 @@ type syncService interface {
 
 type relayService interface {
 	Models(context.Context) ([]string, error)
+	ProviderCatalog(context.Context) (communityrelay.ProviderCatalog, error)
 	ExecuteChat(context.Context, canonical.ChatRequest) (*canonical.ChatResponse, error)
 	StreamChat(context.Context, canonical.ChatRequest, func(canonical.StreamChunk) error) error
 }
@@ -122,6 +123,26 @@ func New(
 		if err := openaiprotocol.WriteModels(w, models); err != nil {
 			openaiprotocol.WriteError(w, http.StatusInternalServerError, err.Error())
 		}
+	})))
+
+	mux.Handle("/api/v1/catalog/providers", withAuth(auth, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+
+		catalog, err := relay.ProviderCatalog(r.Context())
+		if err != nil {
+			writeMappedError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"version":          catalog.Version,
+			"cloud_updated_at": catalog.CloudUpdatedAt,
+			"cloud_hash":       catalog.CloudHash,
+			"provider_groups":  catalog.ProviderGroups,
+		})
 	})))
 
 	mux.Handle("/api/v1/relay/chat/completions", withAuth(auth, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

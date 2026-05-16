@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package zenhub.control.v1;
+
+option go_package = "zenhub/internal/gen/controlv1;controlv1";
+
+service AuthService {
+  rpc Login(LoginRequest) returns (LoginResponse);
+}
+
+service CommunityControlService {
+  rpc Status(StatusRequest) returns (StatusResponse);
+  rpc Pull(PullRequest) returns (PullResponse);
+  rpc Push(PushRequest) returns (PushResponse);
+  rpc GetProviders(GetProvidersRequest) returns (GetProvidersResponse);
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string token_type = 2;
+  int64 expires_in = 3;
+  int64 expires_at = 4;
+  string username = 5;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  bool has_snapshot = 1;
+  int64 version = 2;
+  int64 cloud_updated_at = 3;
+  string cloud_hash = 4;
+  int64 last_pull_at = 5;
+  int64 last_push_at = 6;
+}
+
+message PullRequest {
+  int64 last_sync_at = 1;
+  int64 local_modified_at = 2;
+  string local_hash = 3;
+}
+
+message PullResponse {
+  string status = 1;
+  int64 version = 2;
+  int64 cloud_updated_at = 3;
+  string cloud_hash = 4;
+  Snapshot snapshot = 5;
+}
+
+message PushRequest {
+  int64 last_sync_at = 1;
+  int64 local_modified_at = 2;
+  string local_hash = 3;
+  Snapshot snapshot = 4;
+}
+
+message PushResponse {
+  string status = 1;
+  int64 version = 2;
+  int64 cloud_updated_at = 3;
+  string cloud_hash = 4;
+  Snapshot snapshot = 5;
+}
+
+message GetProvidersRequest {}
+
+message GetProvidersResponse {
+  int64 version = 1;
+  int64 cloud_updated_at = 2;
+  string cloud_hash = 3;
+  repeated ProviderGroup provider_groups = 4;
+}
+
+message Snapshot {
+  repeated Route routes = 1;
+  repeated ProviderGroup provider_groups = 2;
+}
+
+message Route {
+  string model = 1;
+  string mode = 2;
+  string provider_group = 3;
+  string upstream_model = 4;
+}
+
+message ProviderGroup {
+  string name = 1;
+  string strategy = 2;
+  string timeout = 3;
+  int32 retry_count = 4;
+  int32 max_node_attempts = 5;
+  PassiveHealthConfig passive_health = 6;
+  repeated Node nodes = 7;
+  CodexProviderConfig codex = 8;
+}
+
+message PassiveHealthConfig {
+  int32 failure_threshold = 1;
+  string cooldown = 2;
+}
+
+message Node {
+  string name = 1;
+  string base_url = 2;
+  string api_key = 3;
+  string api_key_env = 4;
+  map<string, string> headers = 5;
+}
+
+message CodexProviderConfig {
+  bytes auth_json = 1;
+  string config = 2;
+}
