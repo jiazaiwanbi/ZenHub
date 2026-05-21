@@ -24,18 +24,49 @@ type Duration struct {
 	time.Duration
 }
 
+type Protocol string
+
+const (
+	ProtocolOpenAI    Protocol = "openai"
+	ProtocolAnthropic Protocol = "anthropic"
+	ProtocolGemini    Protocol = "gemini"
+)
+
 type File struct {
+	Providers      []Provider          `json:"providers,omitempty"`
 	Listen         string              `json:"listen"`
-	Routes         []Route             `json:"routes"`
-	ProviderGroups []ProviderGroup     `json:"provider_groups"`
+	Routes         []Route             `json:"routes,omitempty"`
+	ProviderGroups []ProviderGroup     `json:"provider_groups,omitempty"`
 	Observability  ObservabilityConfig `json:"observability"`
 	Sync           SyncConfig          `json:"sync"`
 	Codex          CodexSettings       `json:"codex,omitempty"`
 }
 
 type Snapshot struct {
-	Routes         []Route         `json:"routes"`
-	ProviderGroups []ProviderGroup `json:"provider_groups"`
+	Providers      []Provider      `json:"providers,omitempty"`
+	Routes         []Route         `json:"routes,omitempty"`
+	ProviderGroups []ProviderGroup `json:"provider_groups,omitempty"`
+}
+
+type Provider struct {
+	Name          string               `json:"name"`
+	Protocol      Protocol             `json:"protocol"`
+	Mode          string               `json:"mode,omitempty"`
+	BaseURL       string               `json:"base_url"`
+	APIKey        string               `json:"api_key,omitempty"`
+	APIKeyEnv     string               `json:"api_key_env,omitempty"`
+	Headers       map[string]string    `json:"headers,omitempty"`
+	Timeout       Duration             `json:"timeout,omitempty"`
+	RetryCount    int                  `json:"retry_count,omitempty"`
+	PassiveHealth PassiveHealthConfig  `json:"passive_health,omitempty"`
+	Codex         *CodexProviderConfig `json:"codex,omitempty"`
+	Models        []ProviderModel      `json:"models"`
+}
+
+type ProviderModel struct {
+	Alias     string `json:"alias"`
+	RealModel string `json:"real_model"`
+	Weight    int    `json:"weight,omitempty"`
 }
 
 type Route struct {
@@ -122,7 +153,7 @@ func LoadFile(path string) (File, error) {
 	if err := json.Unmarshal(raw, &file); err != nil {
 		return File{}, fmt.Errorf("decode config: %w", err)
 	}
-	return file, nil
+	return NormalizeFile(file), nil
 }
 
 func (d *Duration) UnmarshalJSON(data []byte) error {
@@ -153,9 +184,45 @@ func (f File) Runtime() (Runtime, error) {
 }
 
 func (f File) Snapshot() Snapshot {
-	return Snapshot{
+	snapshot := Snapshot{
+		Providers:      append([]Provider(nil), f.Providers...),
 		Routes:         append([]Route(nil), f.Routes...),
 		ProviderGroups: append([]ProviderGroup(nil), f.ProviderGroups...),
+	}
+	return NormalizeSnapshot(snapshot)
+}
+
+func NormalizeFile(file File) File {
+	if len(file.Providers) == 0 {
+		return file
+	}
+
+	normalized := NormalizeSnapshot(Snapshot{
+		Providers:      append([]Provider(nil), file.Providers...),
+		Routes:         append([]Route(nil), file.Routes...),
+		ProviderGroups: append([]ProviderGroup(nil), file.ProviderGroups...),
+	})
+	file.Providers = normalized.Providers
+	file.Routes = normalized.Routes
+	file.ProviderGroups = normalized.ProviderGroups
+	return file
+}
+
+func NormalizeSnapshot(snapshot Snapshot) Snapshot {
+	if len(snapshot.Providers) == 0 {
+		return snapshot
+	}
+
+	routes, groups, err := compileProviders(snapshot.Providers)
+	if err != nil {
+		return snapshot
+	}
+	snapshot.Routes = routes
+	snapshot.ProviderGroups = groups
+	return Snapshot{
+		Providers:      append([]Provider(nil), snapshot.Providers...),
+		Routes:         append([]Route(nil), snapshot.Routes...),
+		ProviderGroups: append([]ProviderGroup(nil), snapshot.ProviderGroups...),
 	}
 }
 
@@ -173,6 +240,8 @@ func runtimeFromParts(listen string, snapshot Snapshot, observabilityLimit int) 
 	if listen == "" {
 		listen = defaultListen
 	}
+
+	snapshot = NormalizeSnapshot(snapshot)
 	if len(snapshot.Routes) == 0 {
 		return Runtime{}, errors.New("at least one route is required")
 	}
@@ -265,6 +334,103 @@ func convertGroup(group ProviderGroup) (balancer.Group, error) {
 	}, nil
 }
 
+func compileProviders(providers []Provider) ([]Route, []ProviderGroup, error) {
+	if len(providers) == 0 {
+		return nil, nil, nil
+	}
+
+	routes := make([]Route, 0, len(providers))
+	groups := make([]ProviderGroup, 0, len(providers))
+	seenProviders := make(map[string]bool, len(providers))
+
+	for _, provider := range providers {
+		name := strings.TrimSpace(provider.Name)
+		if name == "" {
+			return nil, nil, errors.New("provider name is required")
+		}
+		if seenProviders[name] {
+			return nil, nil, fmt.Errorf("duplicate provider %q", name)
+		}
+		seenProviders[name] = true
+
+		protocol := normalizeProviderProtocol(provider.Protocol)
+		if protocol == "" {
+			return nil, nil, fmt.Errorf("provider %q protocol is required", name)
+		}
+		if strings.TrimSpace(provider.BaseURL) == "" {
+			return nil, nil, fmt.Errorf("provider %q base_url is required", name)
+		}
+		if len(provider.Models) == 0 {
+			return nil, nil, fmt.Errorf("provider %q requires at least one model mapping", name)
+		}
+
+		group := ProviderGroup{
+			Name:            name,
+			Protocol:        string(protocol),
+			Strategy:        string(balancer.StrategyRoundRobin),
+			Timeout:         provider.Timeout,
+			RetryCount:      provider.RetryCount,
+			MaxNodeAttempts: 1,
+			PassiveHealth:   provider.PassiveHealth,
+			Nodes: []Node{
+				{
+					Name:      name,
+					BaseURL:   strings.TrimSpace(provider.BaseURL),
+					APIKey:    strings.TrimSpace(provider.APIKey),
+					APIKeyEnv: strings.TrimSpace(provider.APIKeyEnv),
+					Headers:   cloneHeaders(provider.Headers),
+				},
+			},
+			Codex: provider.Codex,
+		}
+		groups = append(groups, group)
+
+		mode := strings.TrimSpace(provider.Mode)
+		if mode == "" {
+			mode = string(router.RouteModeDirect)
+		}
+
+		for _, model := range provider.Models {
+			alias := strings.TrimSpace(model.Alias)
+			realModel := strings.TrimSpace(model.RealModel)
+			if alias == "" {
+				return nil, nil, fmt.Errorf("provider %q has empty alias", name)
+			}
+			if realModel == "" {
+				return nil, nil, fmt.Errorf("provider %q alias %q has empty real_model", name, alias)
+			}
+
+			weight := model.Weight
+			if weight <= 0 {
+				weight = 1
+			}
+			for i := 0; i < weight; i++ {
+				routes = append(routes, Route{
+					Model:         alias,
+					Mode:          mode,
+					ProviderGroup: name,
+					UpstreamModel: realModel,
+				})
+			}
+		}
+	}
+
+	return routes, groups, nil
+}
+
+func normalizeProviderProtocol(protocol Protocol) Protocol {
+	switch Protocol(strings.ToLower(strings.TrimSpace(string(protocol)))) {
+	case ProtocolOpenAI:
+		return ProtocolOpenAI
+	case ProtocolAnthropic:
+		return ProtocolAnthropic
+	case ProtocolGemini:
+		return ProtocolGemini
+	default:
+		return ""
+	}
+}
+
 func cloneHeaders(headers map[string]string) map[string]string {
 	if headers == nil {
 		return nil
@@ -277,7 +443,7 @@ func cloneHeaders(headers map[string]string) map[string]string {
 }
 
 func HashSnapshot(snapshot Snapshot) (string, error) {
-	raw, err := json.Marshal(snapshot)
+	raw, err := json.Marshal(NormalizeSnapshot(snapshot))
 	if err != nil {
 		return "", fmt.Errorf("marshal snapshot for hashing: %w", err)
 	}

@@ -55,6 +55,10 @@ type trayController struct {
 	quitItem          *fyne.MenuItem
 }
 
+func Run(runtime *appcore.Runtime) error {
+	return runTray(runtime)
+}
+
 func runTray(runtime *appcore.Runtime) error {
 	guiApp := fyneapp.NewWithID("dev.zenhub.client")
 	desk, ok := guiApp.(desktop.App)
@@ -396,4 +400,67 @@ func codexProviderMenu(
 		items = append(items, newDisabledMenuItem("No Codex providers"))
 	}
 	return fyne.NewMenu("", items...)
+}
+
+func boolText(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
+}
+
+func fallback(value, defaultValue string) string {
+	if strings.TrimSpace(value) == "" {
+		return defaultValue
+	}
+	return strings.TrimSpace(value)
+}
+
+func truncate(value string, max int) string {
+	if max <= 0 || len(value) <= max {
+		return value
+	}
+	if max <= 3 {
+		return value[:max]
+	}
+	return value[:max-3] + "..."
+}
+
+func conflictReasonText(reason string) string {
+	switch strings.TrimSpace(reason) {
+	case "first_sync_mismatch":
+		return "Local and cloud snapshots differed before the first sync."
+	case "pull_conflict":
+		return "Both local and cloud snapshots changed since the last sync."
+	case "push_conflict":
+		return "Cloud snapshot changed before the local snapshot could be uploaded."
+	default:
+		return fallback(reason, "unknown")
+	}
+}
+
+func localSyncStatusText(state appcore.SyncStateView) string {
+	if !state.Enabled {
+		return "sync disabled"
+	}
+	if state.LocalHash == "" {
+		return "no local snapshot hash"
+	}
+	if state.LocalModifiedAt.IsZero() {
+		return "hash " + state.LocalHash
+	}
+	return fmt.Sprintf("%s @ %s", state.LocalHash, trayTimeText(state.LocalModifiedAt, "-"))
+}
+
+func cloudSyncStatusText(state appcore.SyncStateView) string {
+	if !state.Enabled {
+		return "sync disabled"
+	}
+	if state.CloudHash == "" {
+		return "no cloud snapshot hash"
+	}
+	if state.CloudUpdatedAt.IsZero() {
+		return "hash " + state.CloudHash
+	}
+	return fmt.Sprintf("%s @ %s", state.CloudHash, trayTimeText(state.CloudUpdatedAt, "-"))
 }

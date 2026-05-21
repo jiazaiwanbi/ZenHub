@@ -266,6 +266,72 @@ func TestServiceRelayRouteUsesRelayExecutor(t *testing.T) {
 	}
 }
 
+func TestServiceFailsOverAcrossModelPoolEntries(t *testing.T) {
+	firstHits := 0
+	secondHits := 0
+
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		firstHits++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"error":{"message":"rate limited"}}`)
+	}))
+	defer first.Close()
+
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secondHits++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"resp_pool","model":"provider-b-model","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
+	}))
+	defer second.Close()
+
+	service := newTestService(t, []router.Rule{
+		{Model: "sonnet", Mode: router.RouteModeDirect, ProviderGroup: "provider-a", UpstreamModel: "provider-a-model"},
+		{Model: "sonnet", Mode: router.RouteModeDirect, ProviderGroup: "provider-b", UpstreamModel: "provider-b-model"},
+	}, []balancer.Group{
+		{
+			Name:            "provider-a",
+			Strategy:        balancer.StrategyRoundRobin,
+			Timeout:         2 * time.Second,
+			RetryCount:      0,
+			MaxNodeAttempts: 1,
+			PassiveHealth: balancer.PassiveHealth{
+				FailureThreshold: 1,
+				Cooldown:         time.Minute,
+			},
+			Nodes: []balancer.Node{
+				{Name: "provider-a-node", BaseURL: first.URL},
+			},
+		},
+		{
+			Name:            "provider-b",
+			Strategy:        balancer.StrategyRoundRobin,
+			Timeout:         2 * time.Second,
+			RetryCount:      0,
+			MaxNodeAttempts: 1,
+			PassiveHealth: balancer.PassiveHealth{
+				FailureThreshold: 1,
+				Cooldown:         time.Minute,
+			},
+			Nodes: []balancer.Node{
+				{Name: "provider-b-node", BaseURL: second.URL},
+			},
+		},
+	})
+
+	request := mustParseRequest(t, `{"model":"sonnet","messages":[{"role":"user","content":"hello"}]}`)
+	response, err := service.ExecuteChat(t.Context(), request)
+	if err != nil {
+		t.Fatalf("ExecuteChat() error = %v", err)
+	}
+	if response.Model != "provider-b-model" {
+		t.Fatalf("response.Model = %q, want provider-b-model", response.Model)
+	}
+	if firstHits != 1 || secondHits != 1 {
+		t.Fatalf("hits = %d/%d, want 1/1", firstHits, secondHits)
+	}
+}
+
 func newTestService(t *testing.T, rules []router.Rule, groups []balancer.Group) *Service {
 	t.Helper()
 

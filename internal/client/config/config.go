@@ -13,8 +13,11 @@ import (
 )
 
 type Duration = coreconfig.Duration
+type Protocol = coreconfig.Protocol
 type File = coreconfig.File
 type Snapshot = coreconfig.Snapshot
+type Provider = coreconfig.Provider
+type ProviderModel = coreconfig.ProviderModel
 type Route = coreconfig.Route
 type ProviderGroup = coreconfig.ProviderGroup
 type PassiveHealthConfig = coreconfig.PassiveHealthConfig
@@ -54,6 +57,7 @@ func LoadFile(path string) (File, error) {
 }
 
 func SaveFile(path string, file File) error {
+	file = coreconfig.NormalizeFile(file)
 	raw, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
@@ -125,9 +129,10 @@ func existingPerm(path string, defaultPerm os.FileMode) (os.FileMode, error) {
 }
 
 func ApplySnapshot(file File, snapshot Snapshot) File {
+	file.Providers = append([]Provider(nil), snapshot.Providers...)
 	file.Routes = append([]Route(nil), snapshot.Routes...)
 	file.ProviderGroups = append([]ProviderGroup(nil), snapshot.ProviderGroups...)
-	return file
+	return coreconfig.NormalizeFile(file)
 }
 
 func ResolveSync(raw SyncConfig) (ResolvedSyncConfig, error) {
@@ -168,7 +173,7 @@ func SyncStatePath(configPath string) string {
 }
 
 func DefaultFile() File {
-	return File{
+	file := File{
 		Listen: "127.0.0.1:8080",
 		Observability: ObservabilityConfig{
 			MaxRecords: 200,
@@ -179,58 +184,48 @@ func DefaultFile() File {
 			Username:    "admin",
 			PasswordEnv: "ZENHUB_COMMUNITY_PASSWORD",
 		},
-		Routes: []Route{
+		Providers: []Provider{
 			{
-				Model:         "gpt-4o-mini",
-				Mode:          "direct",
-				ProviderGroup: "openai-direct",
-				UpstreamModel: "gpt-4o-mini",
-			},
-			{
-				Model:         "relay-model",
-				Mode:          "relay",
-				ProviderGroup: "community-relay",
-			},
-		},
-		ProviderGroups: []ProviderGroup{
-			{
-				Name:            "openai-direct",
-				Strategy:        "round_robin",
-				Timeout:         Duration{Duration: defaultConfigTimeout},
-				RetryCount:      1,
-				MaxNodeAttempts: 1,
+				Name:       "openai-direct",
+				Protocol:   Protocol("openai"),
+				Mode:       "direct",
+				BaseURL:    "https://api.openai.com",
+				APIKeyEnv:  "OPENAI_API_KEY",
+				Timeout:    Duration{Duration: defaultConfigTimeout},
+				RetryCount: 1,
 				PassiveHealth: PassiveHealthConfig{
 					FailureThreshold: 2,
 					Cooldown:         Duration{Duration: defaultConfigCooldown},
 				},
-				Nodes: []Node{
+				Models: []ProviderModel{
 					{
-						Name:      "openai-primary",
-						BaseURL:   "https://api.openai.com",
-						APIKeyEnv: "OPENAI_API_KEY",
+						Alias:     "gpt-4o-mini",
+						RealModel: "gpt-4o-mini",
 					},
 				},
 			},
 			{
-				Name:            "community-relay",
-				Strategy:        "fill_first",
-				Timeout:         Duration{Duration: relayConfigTimeout},
-				RetryCount:      0,
-				MaxNodeAttempts: 1,
+				Name:       "community-relay",
+				Protocol:   Protocol("openai"),
+				Mode:       "relay",
+				BaseURL:    "http://127.0.0.1:8081",
+				APIKeyEnv:  "ZENHUB_COMMUNITY_TOKEN",
+				Timeout:    Duration{Duration: relayConfigTimeout},
+				RetryCount: 0,
 				PassiveHealth: PassiveHealthConfig{
 					FailureThreshold: 1,
 					Cooldown:         Duration{Duration: relayConfigCooldown},
 				},
-				Nodes: []Node{
+				Models: []ProviderModel{
 					{
-						Name:      "community-primary",
-						BaseURL:   "http://127.0.0.1:8081",
-						APIKeyEnv: "ZENHUB_COMMUNITY_TOKEN",
+						Alias:     "relay-model",
+						RealModel: "relay-model",
 					},
 				},
 			},
 		},
 	}
+	return coreconfig.NormalizeFile(file)
 }
 
 func DefaultPaths() (ClientPaths, error) {

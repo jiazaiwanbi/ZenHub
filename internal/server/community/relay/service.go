@@ -23,6 +23,7 @@ type ProviderCatalog struct {
 	Version        int64
 	CloudUpdatedAt int64
 	CloudHash      string
+	Providers      []runtimeconfig.Provider
 	ProviderGroups []runtimeconfig.ProviderGroup
 }
 
@@ -54,6 +55,7 @@ func (s *Service) ProviderCatalog(ctx context.Context) (ProviderCatalog, error) 
 		Version:        record.Version,
 		CloudUpdatedAt: record.UpdatedAt.UnixMilli(),
 		CloudHash:      record.Hash,
+		Providers:      cloneProviders(record.Snapshot.Providers),
 		ProviderGroups: cloneProviderGroups(record.Snapshot.ProviderGroups),
 	}, nil
 }
@@ -113,6 +115,14 @@ func cloneProviderGroups(groups []runtimeconfig.ProviderGroup) []runtimeconfig.P
 		return nil
 	}
 	return cloned.ProviderGroups
+}
+
+func cloneProviders(providers []runtimeconfig.Provider) []runtimeconfig.Provider {
+	cloned := cloneSnapshot(runtimeconfig.Snapshot{Providers: providers})
+	if cloned == nil {
+		return nil
+	}
+	return cloned.Providers
 }
 
 func cloneSnapshot(snapshot runtimeconfig.Snapshot) *runtimeconfig.Snapshot {

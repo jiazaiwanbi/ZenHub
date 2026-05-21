@@ -144,6 +144,7 @@ func New(
 			"version":          catalog.Version,
 			"cloud_updated_at": catalog.CloudUpdatedAt,
 			"cloud_hash":       catalog.CloudHash,
+			"providers":        catalog.Providers,
 			"provider_groups":  catalog.ProviderGroups,
 		})
 	})))

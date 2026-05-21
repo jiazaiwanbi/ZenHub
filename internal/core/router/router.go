@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"zenhub/internal/core/canonical"
 )
@@ -26,6 +27,7 @@ type Rule struct {
 }
 
 type Decision struct {
+	Key           string
 	Model         string
 	Mode          RouteMode
 	ProviderGroup string
@@ -33,8 +35,14 @@ type Decision struct {
 }
 
 type Router struct {
-	rules  map[string]Rule
+	mu     sync.Mutex
+	pools  map[string]*poolState
 	models []string
+}
+
+type poolState struct {
+	rules     []Rule
+	nextIndex int
 }
 
 func New(rules []Rule) (*Router, error) {
@@ -42,8 +50,8 @@ func New(rules []Rule) (*Router, error) {
 		return nil, errors.New("at least one route rule is required")
 	}
 
-	byModel := make(map[string]Rule, len(rules))
-	models := make([]string, 0, len(rules))
+	byModel := make(map[string]*poolState, len(rules))
+	modelSet := make(map[string]bool, len(rules))
 	for _, rule := range rules {
 		model := strings.TrimSpace(rule.Model)
 		if model == "" {
@@ -59,30 +67,62 @@ func New(rules []Rule) (*Router, error) {
 		if strings.TrimSpace(rule.ProviderGroup) == "" {
 			return nil, fmt.Errorf("route %q provider group is required", rule.Model)
 		}
-		if _, exists := byModel[rule.Model]; exists {
-			return nil, fmt.Errorf("duplicate route for model %q", rule.Model)
+
+		pool, exists := byModel[rule.Model]
+		if !exists {
+			pool = &poolState{}
+			byModel[rule.Model] = pool
 		}
-		byModel[rule.Model] = rule
-		models = append(models, rule.Model)
+		pool.rules = append(pool.rules, rule)
+		modelSet[rule.Model] = true
+	}
+
+	models := make([]string, 0, len(modelSet))
+	for model := range modelSet {
+		models = append(models, model)
 	}
 	sort.Strings(models)
 
-	return &Router{rules: byModel, models: models}, nil
+	return &Router{pools: byModel, models: models}, nil
 }
 
 func (r *Router) Select(req canonical.ChatRequest) (Decision, error) {
-	rule, ok := r.rules[req.Model]
+	return r.SelectWithExclusions(req, nil)
+}
+
+func (r *Router) SelectWithExclusions(req canonical.ChatRequest, excluded map[string]bool) (Decision, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	pool, ok := r.pools[req.Model]
 	if !ok {
 		return Decision{}, fmt.Errorf("%w %q", ErrNoRoute, req.Model)
 	}
-	return Decision{
-		Model:         rule.Model,
-		Mode:          rule.Mode,
-		ProviderGroup: rule.ProviderGroup,
-		UpstreamModel: rule.UpstreamModel,
-	}, nil
+	for offset := 0; offset < len(pool.rules); offset++ {
+		idx := (pool.nextIndex + offset) % len(pool.rules)
+		key := decisionKey(req.Model, idx)
+		if excluded != nil && excluded[key] {
+			continue
+		}
+
+		rule := pool.rules[idx]
+		pool.nextIndex = (idx + 1) % len(pool.rules)
+		return Decision{
+			Key:           key,
+			Model:         rule.Model,
+			Mode:          rule.Mode,
+			ProviderGroup: rule.ProviderGroup,
+			UpstreamModel: rule.UpstreamModel,
+		}, nil
+	}
+
+	return Decision{}, fmt.Errorf("%w %q", ErrNoRoute, req.Model)
 }
 
 func (r *Router) Models() []string {
 	return append([]string(nil), r.models...)
+}
+
+func decisionKey(model string, index int) string {
+	return fmt.Sprintf("%s#%d", model, index)
 }

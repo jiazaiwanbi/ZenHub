@@ -13,35 +13,28 @@
     "config_dir": "/path/to/.codex",
     "current_provider_group": "openai-direct"
   },
-  "routes": [
-    {
-      "model": "gpt-4o-mini",
-      "mode": "direct",
-      "provider_group": "openai-direct",
-      "upstream_model": "gpt-4o-mini"
-    },
-    {
-      "model": "relay-model",
-      "mode": "relay",
-      "provider_group": "community-relay"
-    }
-  ],
-  "provider_groups": [
+  "providers": [
     {
       "name": "openai-direct",
-      "strategy": "round_robin",
+      "protocol": "openai",
+      "mode": "direct",
+      "base_url": "https://api.openai.com",
+      "api_key_env": "OPENAI_API_KEY",
       "timeout": "30s",
       "retry_count": 1,
-      "max_node_attempts": 1,
       "passive_health": {
         "failure_threshold": 2,
         "cooldown": "30s"
       },
-      "nodes": [
+      "models": [
         {
-          "name": "openai-primary",
-          "base_url": "https://api.openai.com",
-          "api_key_env": "OPENAI_API_KEY"
+          "alias": "gpt-4o-mini",
+          "real_model": "gpt-4o-mini",
+          "weight": 2
+        },
+        {
+          "alias": "sonnet",
+          "real_model": "gpt-4o-mini"
         }
       ],
       "codex": {
@@ -53,19 +46,20 @@
     },
     {
       "name": "community-relay",
-      "strategy": "fill_first",
+      "protocol": "openai",
+      "mode": "relay",
+      "base_url": "http://127.0.0.1:8081",
+      "api_key_env": "ZENHUB_COMMUNITY_TOKEN",
       "timeout": "10s",
       "retry_count": 0,
-      "max_node_attempts": 1,
       "passive_health": {
         "failure_threshold": 1,
         "cooldown": "10s"
       },
-      "nodes": [
+      "models": [
         {
-          "name": "community-primary",
-          "base_url": "http://127.0.0.1:8081",
-          "api_key_env": "ZENHUB_COMMUNITY_TOKEN"
+          "alias": "relay-model",
+          "real_model": "relay-model"
         }
       ],
       "codex": {
@@ -74,6 +68,25 @@
         },
         "config": "model_provider = \"community-relay\"\n\n[model_providers.community-relay]\nbase_url = \"http://127.0.0.1:8081\"\nwire_api = \"chat_completions\"\n"
       }
+    },
+    {
+      "name": "anthropic-direct",
+      "protocol": "anthropic",
+      "mode": "direct",
+      "base_url": "https://api.anthropic.com",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "timeout": "30s",
+      "retry_count": 1,
+      "passive_health": {
+        "failure_threshold": 2,
+        "cooldown": "30s"
+      },
+      "models": [
+        {
+          "alias": "sonnet",
+          "real_model": "claude-3-7-sonnet"
+        }
+      ]
     }
   ]
 }

@@ -120,82 +120,109 @@ func (s *Service) run(
 		s.observer.Record(record)
 	}
 
-	decision, err := s.router.Select(req)
-	if err != nil {
-		finish("", "", 0, err)
-		return nil, err
-	}
-	record.RouteMode = string(decision.Mode)
-
-	exec := s.executorForMode(decision.Mode)
-	if exec == nil {
-		err := executor.ErrRelayNotImplemented
-		finish("", "", 0, err)
-		return nil, err
-	}
-
-	group, err := s.balancer.Group(decision.ProviderGroup)
-	if err != nil {
-		finish("", "", 0, err)
-		return nil, err
-	}
-
 	selectedNode := ""
+	selectedStrategy := balancer.Strategy("")
 	retryCount := 0
-	usedNodes := make(map[string]bool, group.MaxNodeAttempts)
 	var lastErr error
-	for nodeAttempt := 0; nodeAttempt < group.MaxNodeAttempts; nodeAttempt++ {
-		selection, err := s.balancer.Select(group.Name, usedNodes)
+	excludedRoutes := map[string]bool{}
+
+	runDecision := func(
+		decision router.Decision,
+		exec ChatExecutor,
+		group balancer.Group,
+	) (*canonical.ChatResponse, string, error) {
+		usedNodes := make(map[string]bool, group.MaxNodeAttempts)
+		currentSelectedNode := ""
+		for nodeAttempt := 0; nodeAttempt < group.MaxNodeAttempts; nodeAttempt++ {
+			selection, err := s.balancer.Select(group.Name, usedNodes)
+			if err != nil {
+				if lastErr == nil {
+					lastErr = err
+				}
+				break
+			}
+			usedNodes[selection.Node.Name] = true
+			currentSelectedNode = selection.Node.Name
+
+			for retry := 0; retry <= group.RetryCount; retry++ {
+				if yield == nil {
+					response, executeErr := exec.Execute(ctx, group, decision, selection.Node, req)
+					if executeErr == nil {
+						s.balancer.ReportSuccess(group.Name, selection.Node.Name)
+						return response, currentSelectedNode, nil
+					}
+					lastErr = executeErr
+				} else {
+					streamErr := exec.Stream(ctx, group, decision, selection.Node, req, yield)
+					if streamErr == nil {
+						s.balancer.ReportSuccess(group.Name, selection.Node.Name)
+						return nil, currentSelectedNode, nil
+					}
+					lastErr = streamErr
+
+					var startedStream *executor.StreamError
+					if errors.As(streamErr, &startedStream) && startedStream.Started {
+						s.balancer.ReportFailure(group.Name, selection.Node.Name)
+						return nil, currentSelectedNode, streamErr
+					}
+				}
+
+				s.balancer.ReportFailure(group.Name, selection.Node.Name)
+				if !executor.IsRetryable(lastErr) {
+					return nil, currentSelectedNode, lastErr
+				}
+				if retry < group.RetryCount {
+					retryCount++
+				}
+			}
+		}
+
+		if lastErr == nil {
+			lastErr = fmt.Errorf("%w in %q", balancer.ErrNoHealthyNodes, group.Name)
+		}
+		return nil, currentSelectedNode, lastErr
+	}
+
+	for {
+		decision, err := s.router.SelectWithExclusions(req, excludedRoutes)
 		if err != nil {
 			if lastErr == nil {
 				lastErr = err
 			}
 			break
 		}
-		usedNodes[selection.Node.Name] = true
-		selectedNode = selection.Node.Name
+		excludedRoutes[decision.Key] = true
+		record.RouteMode = string(decision.Mode)
 
-		for retry := 0; retry <= group.RetryCount; retry++ {
-			if yield == nil {
-				response, executeErr := exec.Execute(ctx, group, decision, selection.Node, req)
-				if executeErr == nil {
-					s.balancer.ReportSuccess(group.Name, selection.Node.Name)
-					finish(selectedNode, group.Strategy, retryCount, nil)
-					return response, nil
-				}
-				lastErr = executeErr
-			} else {
-				streamErr := exec.Stream(ctx, group, decision, selection.Node, req, yield)
-				if streamErr == nil {
-					s.balancer.ReportSuccess(group.Name, selection.Node.Name)
-					finish(selectedNode, group.Strategy, retryCount, nil)
-					return nil, nil
-				}
-				lastErr = streamErr
-
-				var startedStream *executor.StreamError
-				if errors.As(streamErr, &startedStream) && startedStream.Started {
-					s.balancer.ReportFailure(group.Name, selection.Node.Name)
-					finish(selectedNode, group.Strategy, retryCount, streamErr)
-					return nil, streamErr
-				}
-			}
-
-			s.balancer.ReportFailure(group.Name, selection.Node.Name)
-			if !executor.IsRetryable(lastErr) {
-				finish(selectedNode, group.Strategy, retryCount, lastErr)
-				return nil, lastErr
-			}
-			if retry < group.RetryCount {
-				retryCount++
-			}
+		exec := s.executorForMode(decision.Mode)
+		if exec == nil {
+			lastErr = executor.ErrRelayNotImplemented
+			break
 		}
+
+		group, err := s.balancer.Group(decision.ProviderGroup)
+		if err != nil {
+			lastErr = err
+			break
+		}
+		selectedStrategy = group.Strategy
+
+		response, nodeName, err := runDecision(decision, exec, group)
+		if nodeName != "" {
+			selectedNode = nodeName
+		}
+		if err == nil {
+			finish(selectedNode, selectedStrategy, retryCount, nil)
+			return response, nil
+		}
+		lastErr = err
+		if !executor.IsRetryable(err) {
+			break
+		}
+		retryCount++
 	}
 
-	if lastErr == nil {
-		lastErr = fmt.Errorf("%w in %q", balancer.ErrNoHealthyNodes, group.Name)
-	}
-	finish(selectedNode, group.Strategy, retryCount, lastErr)
+	finish(selectedNode, selectedStrategy, retryCount, lastErr)
 	return nil, lastErr
 }
 

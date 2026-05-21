@@ -8,19 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
-
 	clientconfig "zenhub/internal/client/config"
-	"zenhub/internal/controlplane"
 	"zenhub/internal/core/runtimeconfig"
-	controlv1 "zenhub/internal/gen/controlv1"
 )
 
 const (
@@ -36,7 +29,6 @@ const (
 )
 
 const (
-	controlDialTimeout      = 3 * time.Second
 	ConflictReasonFirstSync = "first_sync_mismatch"
 	ConflictReasonPull      = "pull_conflict"
 	ConflictReasonPush      = "push_conflict"
@@ -53,12 +45,6 @@ type Manager struct {
 	configPath string
 	client     *http.Client
 	now        func() time.Time
-}
-
-type controlClients struct {
-	conn    *grpc.ClientConn
-	auth    controlv1.AuthServiceClient
-	control controlv1.CommunityControlServiceClient
 }
 
 type State struct {
@@ -153,6 +139,7 @@ type providersResponse struct {
 	Version        int64                         `json:"version,omitempty"`
 	CloudUpdatedAt int64                         `json:"cloud_updated_at,omitempty"`
 	CloudHash      string                        `json:"cloud_hash,omitempty"`
+	Providers      []runtimeconfig.Provider      `json:"providers"`
 	ProviderGroups []runtimeconfig.ProviderGroup `json:"provider_groups"`
 }
 
@@ -197,33 +184,26 @@ func (m *Manager) SyncBeforeStart(ctx context.Context) (clientconfig.File, Repor
 		return file, report, err
 	}
 
-	clients, err := m.dialControl(ctx, resolved.ServerURL)
-	if err != nil {
-		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
-		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("sync login: dial control plane: %w", err))
-	}
-	defer clients.conn.Close()
-
 	localHash, err := runtimeconfig.HashSnapshot(file.Snapshot())
 	if err != nil {
 		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
 		return file, report, m.persistState(withError(state, err.Error(), StatusError), err)
 	}
 
-	token, err := m.login(ctx, clients.auth, resolved)
+	token, err := m.login(ctx, resolved)
 	if err != nil {
 		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
 		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("sync login: %w", err))
 	}
 
-	cloudStatus, err := m.fetchStatus(ctx, clients.control, token)
+	cloudStatus, err := m.fetchStatus(ctx, resolved.ServerURL, token)
 	if err != nil {
 		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
 		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("sync status: %w", err))
 	}
 
 	if state.LastSyncAt == 0 && cloudStatus.HasSnapshot && localHash != cloudStatus.CloudHash {
-		cloudPull, err := m.pull(ctx, clients.control, token, pullRequest{
+		cloudPull, err := m.pull(ctx, resolved.ServerURL, token, pullRequest{
 			LastSyncAt:      0,
 			LocalModifiedAt: localModifiedAt,
 			LocalHash:       localHash,
@@ -264,7 +244,7 @@ func (m *Manager) SyncBeforeStart(ctx context.Context) (clientconfig.File, Repor
 		return file, report, m.persistState(nextState, nil)
 	}
 
-	pullResp, err := m.pull(ctx, clients.control, token, pullRequest{
+	pullResp, err := m.pull(ctx, resolved.ServerURL, token, pullRequest{
 		LastSyncAt:      state.LastSyncAt,
 		LocalModifiedAt: localModifiedAt,
 		LocalHash:       localHash,
@@ -366,14 +346,7 @@ func (m *Manager) SyncOnShutdown(ctx context.Context) (Report, error) {
 		return Report{Enabled: true, Status: StatusError, Error: err.Error()}, err
 	}
 
-	clients, err := m.dialControl(ctx, resolved.ServerURL)
-	if err != nil {
-		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
-		return report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("sync login: dial control plane: %w", err))
-	}
-	defer clients.conn.Close()
-
-	token, err := m.login(ctx, clients.auth, resolved)
+	token, err := m.login(ctx, resolved)
 	if err != nil {
 		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
 		return report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("sync login: %w", err))
@@ -386,7 +359,7 @@ func (m *Manager) SyncOnShutdown(ctx context.Context) (Report, error) {
 		return report, m.persistState(withError(state, err.Error(), StatusError), err)
 	}
 
-	pushResp, err := m.push(ctx, clients.control, token, pushRequest{
+	pushResp, err := m.push(ctx, resolved.ServerURL, token, pushRequest{
 		LastSyncAt:      state.LastSyncAt,
 		LocalModifiedAt: localModifiedAt,
 		LocalHash:       localHash,
@@ -569,26 +542,24 @@ func (m *Manager) SyncProviders(ctx context.Context) (clientconfig.File, Report,
 		return file, Report{Enabled: true, Status: StatusError, Error: err.Error()}, err
 	}
 
-	clients, err := m.dialControl(ctx, resolved.ServerURL)
-	if err != nil {
-		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
-		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("provider sync login: dial control plane: %w", err))
-	}
-	defer clients.conn.Close()
-
-	token, err := m.login(ctx, clients.auth, resolved)
+	token, err := m.login(ctx, resolved)
 	if err != nil {
 		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
 		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("provider sync login: %w", err))
 	}
 
-	catalog, err := m.fetchProviders(ctx, clients.control, token)
+	catalog, err := m.fetchProviders(ctx, resolved.ServerURL, token)
 	if err != nil {
 		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
 		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("provider sync fetch: %w", err))
 	}
 
-	file.ProviderGroups = cloneProviderGroups(catalog.ProviderGroups)
+	if len(catalog.Providers) > 0 {
+		file.Providers = cloneProviders(catalog.Providers)
+		file = clientconfig.ApplySnapshot(file, file.Snapshot())
+	} else {
+		file.ProviderGroups = cloneProviderGroups(catalog.ProviderGroups)
+	}
 	if _, err := file.Runtime(); err != nil {
 		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
 		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("validate provider sync config: %w", err))
@@ -643,14 +614,7 @@ func (m *Manager) resolveWithLocal(ctx context.Context, file clientconfig.File, 
 		return file, report, m.persistState(nextState, nil)
 	}
 
-	clients, err := m.dialControl(ctx, resolved.ServerURL)
-	if err != nil {
-		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
-		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("dial control plane: %w", err))
-	}
-	defer clients.conn.Close()
-
-	token, err := m.login(ctx, clients.auth, resolved)
+	token, err := m.login(ctx, resolved)
 	if err != nil {
 		report := Report{Enabled: true, Status: StatusError, Error: err.Error()}
 		return file, report, m.persistState(withError(state, err.Error(), StatusError), fmt.Errorf("sync login: %w", err))
@@ -662,7 +626,7 @@ func (m *Manager) resolveWithLocal(ctx context.Context, file clientconfig.File, 
 		return file, report, m.persistState(withError(state, err.Error(), StatusError), err)
 	}
 
-	pushResp, err := m.push(ctx, clients.control, token, pushRequest{
+	pushResp, err := m.push(ctx, resolved.ServerURL, token, pushRequest{
 		LastSyncAt:      conflict.Cloud.Timestamp,
 		LocalModifiedAt: m.now().UTC().UnixMilli(),
 		LocalHash:       localHash,
@@ -773,147 +737,92 @@ func (m *Manager) persistState(state State, cause error) error {
 	return cause
 }
 
-func (m *Manager) login(ctx context.Context, client controlv1.AuthServiceClient, cfg clientconfig.ResolvedSyncConfig) (string, error) {
-	response, err := client.Login(ctx, &controlv1.LoginRequest{
-		Username: cfg.Username,
-		Password: cfg.Password,
-	})
-	if err != nil {
+func (m *Manager) login(ctx context.Context, cfg clientconfig.ResolvedSyncConfig) (string, error) {
+	var response loginResponse
+	if err := m.doJSON(
+		ctx,
+		cfg.ServerURL,
+		http.MethodPost,
+		"/api/v1/auth/login",
+		"",
+		loginRequest{Username: cfg.Username, Password: cfg.Password},
+		[]int{http.StatusOK},
+		&response,
+	); err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(response.GetAccessToken()) == "" {
+	if strings.TrimSpace(response.AccessToken) == "" {
 		return "", errors.New("login returned empty access_token")
 	}
-	return strings.TrimSpace(response.GetAccessToken()), nil
+	return strings.TrimSpace(response.AccessToken), nil
 }
 
-func (m *Manager) fetchStatus(ctx context.Context, client controlv1.CommunityControlServiceClient, token string) (statusResponse, error) {
-	response, err := client.Status(withBearerToken(ctx, token), &controlv1.StatusRequest{})
-	if err != nil {
+func (m *Manager) fetchStatus(ctx context.Context, serverURL, token string) (statusResponse, error) {
+	var response statusResponse
+	if err := m.doJSON(
+		ctx,
+		serverURL,
+		http.MethodGet,
+		"/api/v1/sync/status",
+		token,
+		nil,
+		[]int{http.StatusOK},
+		&response,
+	); err != nil {
 		return statusResponse{}, err
 	}
-	return statusResponse{
-		HasSnapshot:    response.GetHasSnapshot(),
-		CloudUpdatedAt: response.GetCloudUpdatedAt(),
-		CloudHash:      response.GetCloudHash(),
-	}, nil
+	return response, nil
 }
 
-func (m *Manager) pull(ctx context.Context, client controlv1.CommunityControlServiceClient, token string, request pullRequest) (pullResponse, error) {
-	response, err := client.Pull(withBearerToken(ctx, token), &controlv1.PullRequest{
-		LastSyncAt:      request.LastSyncAt,
-		LocalModifiedAt: request.LocalModifiedAt,
-		LocalHash:       request.LocalHash,
-	})
-	if err != nil {
+func (m *Manager) pull(ctx context.Context, serverURL, token string, request pullRequest) (pullResponse, error) {
+	var response pullResponse
+	if err := m.doJSON(
+		ctx,
+		serverURL,
+		http.MethodPost,
+		"/api/v1/sync/pull",
+		token,
+		request,
+		[]int{http.StatusOK},
+		&response,
+	); err != nil {
 		return pullResponse{}, err
 	}
-	snapshot, err := controlplane.FromProtoSnapshot(response.GetSnapshot())
-	if err != nil {
-		return pullResponse{}, err
-	}
-	var snapshotPtr *runtimeconfig.Snapshot
-	if response.Snapshot != nil {
-		snapshotPtr = &snapshot
-	}
-	return pullResponse{
-		Status:         response.GetStatus(),
-		CloudUpdatedAt: response.GetCloudUpdatedAt(),
-		CloudHash:      response.GetCloudHash(),
-		Snapshot:       snapshotPtr,
-	}, nil
+	return response, nil
 }
 
-func (m *Manager) push(ctx context.Context, client controlv1.CommunityControlServiceClient, token string, request pushRequest) (pushResponse, error) {
-	response, err := client.Push(withBearerToken(ctx, token), &controlv1.PushRequest{
-		LastSyncAt:      request.LastSyncAt,
-		LocalModifiedAt: request.LocalModifiedAt,
-		LocalHash:       request.LocalHash,
-		Snapshot:        controlplane.ToProtoSnapshot(request.Snapshot),
-	})
-	if err != nil {
+func (m *Manager) push(ctx context.Context, serverURL, token string, request pushRequest) (pushResponse, error) {
+	var response pushResponse
+	if err := m.doJSON(
+		ctx,
+		serverURL,
+		http.MethodPost,
+		"/api/v1/sync/push",
+		token,
+		request,
+		[]int{http.StatusOK, http.StatusConflict},
+		&response,
+	); err != nil {
 		return pushResponse{}, err
 	}
-	snapshot, err := controlplane.FromProtoSnapshot(response.GetSnapshot())
-	if err != nil {
-		return pushResponse{}, err
-	}
-	var snapshotPtr *runtimeconfig.Snapshot
-	if response.Snapshot != nil {
-		snapshotPtr = &snapshot
-	}
-	return pushResponse{
-		Status:         response.GetStatus(),
-		CloudUpdatedAt: response.GetCloudUpdatedAt(),
-		CloudHash:      response.GetCloudHash(),
-		Snapshot:       snapshotPtr,
-	}, nil
+	return response, nil
 }
 
-func (m *Manager) fetchProviders(ctx context.Context, client controlv1.CommunityControlServiceClient, token string) (providersResponse, error) {
-	response, err := client.GetProviders(withBearerToken(ctx, token), &controlv1.GetProvidersRequest{})
-	if err != nil {
+func (m *Manager) fetchProviders(ctx context.Context, serverURL, token string) (providersResponse, error) {
+	var response providersResponse
+	if err := m.doJSON(
+		ctx,
+		serverURL,
+		http.MethodGet,
+		"/api/v1/catalog/providers",
+		token,
+		nil,
+		[]int{http.StatusOK},
+		&response,
+	); err != nil {
 		return providersResponse{}, err
 	}
-	providerGroups, err := controlplane.FromProtoProviderGroups(response.GetProviderGroups())
-	if err != nil {
-		return providersResponse{}, err
-	}
-	return providersResponse{
-		Version:        response.GetVersion(),
-		CloudUpdatedAt: response.GetCloudUpdatedAt(),
-		CloudHash:      response.GetCloudHash(),
-		ProviderGroups: providerGroups,
-	}, nil
-}
-
-func (m *Manager) dialControl(ctx context.Context, serverURL string) (controlClients, error) {
-	target, err := controlTarget(serverURL)
-	if err != nil {
-		return controlClients{}, err
-	}
-
-	dialCtx, cancel := context.WithTimeout(ctx, controlDialTimeout)
-	defer cancel()
-
-	conn, err := grpc.DialContext(
-		dialCtx,
-		target,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		return controlClients{}, err
-	}
-
-	return controlClients{
-		conn:    conn,
-		auth:    controlv1.NewAuthServiceClient(conn),
-		control: controlv1.NewCommunityControlServiceClient(conn),
-	}, nil
-}
-
-func controlTarget(serverURL string) (string, error) {
-	value := strings.TrimSpace(serverURL)
-	if value == "" {
-		return "", errors.New("sync server_url is required")
-	}
-
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return "", fmt.Errorf("parse sync server_url: %w", err)
-	}
-	if parsed.Host != "" {
-		return parsed.Host, nil
-	}
-	if parsed.Scheme == "" && parsed.Path != "" {
-		return parsed.Path, nil
-	}
-	return "", fmt.Errorf("sync server_url %q does not include a dialable host", serverURL)
-}
-
-func withBearerToken(ctx context.Context, token string) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+strings.TrimSpace(token))
+	return response, nil
 }
 
 func (m *Manager) doJSON(
@@ -1090,6 +999,14 @@ func cloneSnapshot(snapshot runtimeconfig.Snapshot) *runtimeconfig.Snapshot {
 		return nil
 	}
 	return &cloned
+}
+
+func cloneProviders(providers []runtimeconfig.Provider) []runtimeconfig.Provider {
+	cloned := cloneSnapshot(runtimeconfig.Snapshot{Providers: providers})
+	if cloned == nil {
+		return nil
+	}
+	return cloned.Providers
 }
 
 func cloneProviderGroups(groups []runtimeconfig.ProviderGroup) []runtimeconfig.ProviderGroup {
