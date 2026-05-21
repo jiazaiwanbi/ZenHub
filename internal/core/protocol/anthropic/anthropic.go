@@ -1,4 +1,4 @@
-package openai
+package anthropic
 
 import (
 	"encoding/json"
@@ -6,20 +6,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
 	"zenhub/internal/core/canonical"
 )
 
-const maxChatRequestBytes = 8 << 20
+const maxRequestBytes = 8 << 20
 
-var ErrInvalidRequest = errors.New("invalid OpenAI chat completions request")
+var ErrInvalidRequest = errors.New("invalid anthropic messages request")
 
-type chatRequestEnvelope struct {
+type messagesRequestEnvelope struct {
 	Model       string            `json:"model"`
 	Messages    []json.RawMessage `json:"messages"`
+	System      json.RawMessage   `json:"system"`
 	Tools       json.RawMessage   `json:"tools"`
 	Temperature *float64          `json:"temperature"`
 	TopP        *float64          `json:"top_p"`
@@ -29,20 +29,17 @@ type chatRequestEnvelope struct {
 }
 
 type messageEnvelope struct {
-	Role       string          `json:"role"`
-	Content    json.RawMessage `json:"content"`
-	Name       string          `json:"name"`
-	ToolCallID string          `json:"tool_call_id"`
-	ToolCalls  json.RawMessage `json:"tool_calls"`
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
 }
 
-func ParseChatCompletion(body io.Reader) (canonical.ChatRequest, error) {
-	rawBody, err := io.ReadAll(io.LimitReader(body, maxChatRequestBytes+1))
+func ParseMessages(body io.Reader) (canonical.ChatRequest, error) {
+	rawBody, err := io.ReadAll(io.LimitReader(body, maxRequestBytes+1))
 	if err != nil {
 		return canonical.ChatRequest{}, fmt.Errorf("%w: read body: %v", ErrInvalidRequest, err)
 	}
-	if len(rawBody) > maxChatRequestBytes {
-		return canonical.ChatRequest{}, fmt.Errorf("%w: body exceeds %d bytes", ErrInvalidRequest, maxChatRequestBytes)
+	if len(rawBody) > maxRequestBytes {
+		return canonical.ChatRequest{}, fmt.Errorf("%w: body exceeds %d bytes", ErrInvalidRequest, maxRequestBytes)
 	}
 
 	var fields map[string]json.RawMessage
@@ -50,7 +47,7 @@ func ParseChatCompletion(body io.Reader) (canonical.ChatRequest, error) {
 		return canonical.ChatRequest{}, fmt.Errorf("%w: malformed JSON: %v", ErrInvalidRequest, err)
 	}
 
-	var envelope chatRequestEnvelope
+	var envelope messagesRequestEnvelope
 	if err := json.Unmarshal(rawBody, &envelope); err != nil {
 		return canonical.ChatRequest{}, fmt.Errorf("%w: malformed fields: %v", ErrInvalidRequest, err)
 	}
@@ -72,7 +69,7 @@ func ParseChatCompletion(body io.Reader) (canonical.ChatRequest, error) {
 
 	return canonical.ChatRequest{
 		ID:            fmt.Sprintf("req_%d", time.Now().UnixNano()),
-		Protocol:      canonical.ProtocolOpenAIChatCompletions,
+		Protocol:      canonical.ProtocolAnthropicMessages,
 		Model:         envelope.Model,
 		RawBody:       cloneRaw(rawBody),
 		Messages:      messages,
@@ -82,53 +79,16 @@ func ParseChatCompletion(body io.Reader) (canonical.ChatRequest, error) {
 		MaxTokens:     envelope.MaxTokens,
 		Stream:        envelope.Stream,
 		Metadata:      envelope.Metadata,
-		RawExtensions: extensionFields(fields, knownChatRequestFields()),
+		RawExtensions: extensionFields(fields, knownRequestFields()),
 		RawFields:     cloneRawMap(fields),
 	}, nil
 }
 
-func WriteChatResponse(w http.ResponseWriter, response *canonical.ChatResponse) error {
+func WriteResponse(w http.ResponseWriter, response *canonical.ChatResponse) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, err := w.Write(response.Raw)
 	return err
-}
-
-func WriteError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]any{
-			"message": message,
-			"type":    "zenhub_error",
-		},
-	})
-}
-
-func WriteModels(w http.ResponseWriter, modelIDs []string) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	return json.NewEncoder(w).Encode(ModelsPayload(modelIDs))
-}
-
-func ModelsPayload(modelIDs []string) map[string]any {
-	models := append([]string(nil), modelIDs...)
-	sort.Strings(models)
-
-	data := make([]map[string]any, 0, len(models))
-	for _, model := range models {
-		data = append(data, map[string]any{
-			"id":       model,
-			"object":   "model",
-			"created":  0,
-			"owned_by": "zenhub",
-		})
-	}
-
-	return map[string]any{
-		"object": "list",
-		"data":   data,
-	}
 }
 
 func PrepareStream(w http.ResponseWriter) (http.Flusher, bool) {
@@ -166,12 +126,9 @@ func parseMessage(raw json.RawMessage) (canonical.Message, error) {
 	}
 
 	return canonical.Message{
-		Role:       envelope.Role,
-		Content:    cloneRaw(envelope.Content),
-		Name:       envelope.Name,
-		ToolCallID: envelope.ToolCallID,
-		ToolCalls:  cloneRaw(envelope.ToolCalls),
-		RawFields:  cloneRawMap(fields),
+		Role:      envelope.Role,
+		Content:   cloneRaw(envelope.Content),
+		RawFields: cloneRawMap(fields),
 	}, nil
 }
 
@@ -186,10 +143,11 @@ func extensionFields(fields map[string]json.RawMessage, known map[string]bool) m
 	return extensions
 }
 
-func knownChatRequestFields() map[string]bool {
+func knownRequestFields() map[string]bool {
 	return map[string]bool{
 		"model":       true,
 		"messages":    true,
+		"system":      true,
 		"tools":       true,
 		"temperature": true,
 		"top_p":       true,
@@ -199,7 +157,7 @@ func knownChatRequestFields() map[string]bool {
 	}
 }
 
-func cloneRaw(raw json.RawMessage) json.RawMessage {
+func cloneRaw(raw []byte) json.RawMessage {
 	if raw == nil {
 		return nil
 	}

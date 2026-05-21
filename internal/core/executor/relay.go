@@ -2,13 +2,12 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"net/http"
+	"net/url"
 
 	"zenhub/internal/core/balancer"
 	"zenhub/internal/core/canonical"
 	"zenhub/internal/core/router"
-	"zenhub/internal/core/transformer"
 )
 
 type Relay struct {
@@ -29,11 +28,8 @@ func (r *Relay) Execute(
 	node balancer.Node,
 	req canonical.ChatRequest,
 ) (*canonical.ChatResponse, error) {
-	payload, err := transformer.OpenAIChatRequest(req, "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("build relay request: %w", err)
-	}
-	return executeOpenAIChat(ctx, r.client, group, node, payload, relayChatCompletionsPath)
+	path := relayPath(req.Protocol, req.Model, false)
+	return executeProtocolChat(ctx, r.client, group, node, req, req.Protocol, path)
 }
 
 func (r *Relay) Stream(
@@ -44,10 +40,23 @@ func (r *Relay) Stream(
 	req canonical.ChatRequest,
 	yield func(canonical.StreamChunk) error,
 ) error {
-	forceStream := true
-	payload, err := transformer.OpenAIChatRequest(req, "", &forceStream)
-	if err != nil {
-		return fmt.Errorf("build relay request: %w", err)
+	path := relayPath(req.Protocol, req.Model, true)
+	streamReq := req
+	streamReq.Stream = true
+	return streamProtocolChat(ctx, r.client, group, node, streamReq, req.Protocol, path, yield)
+}
+
+func relayPath(protocol, model string, stream bool) string {
+	switch normalizeProtocol(protocol) {
+	case "anthropic":
+		return "/api/v1/relay/messages"
+	case "gemini":
+		operation := "generateContent"
+		if stream {
+			operation = "streamGenerateContent"
+		}
+		return "/api/v1/relay/v1beta/models/" + url.PathEscape(model) + ":" + operation
+	default:
+		return "/api/v1/relay/chat/completions"
 	}
-	return streamOpenAIChat(ctx, r.client, group, node, payload, relayChatCompletionsPath, yield)
 }

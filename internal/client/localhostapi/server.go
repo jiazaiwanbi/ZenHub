@@ -3,11 +3,14 @@ package localhostapi
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 
 	"zenhub/internal/core/balancer"
 	"zenhub/internal/core/canonical"
 	"zenhub/internal/core/executor"
+	anthropicprotocol "zenhub/internal/core/protocol/anthropic"
+	geminiprotocol "zenhub/internal/core/protocol/gemini"
 	openaiprotocol "zenhub/internal/core/protocol/openai"
 	"zenhub/internal/core/proxy"
 	"zenhub/internal/core/router"
@@ -35,32 +38,81 @@ func New(service ChatService) http.Handler {
 			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		handleChatCompletions(w, r, service)
+		handleOpenAIChatCompletions(w, r, service)
+	})
+	mux.HandleFunc("/v1/messages", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		handleAnthropicMessages(w, r, service)
+	})
+	mux.HandleFunc("/v1beta/models/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		handleGeminiGenerateContent(w, r, service)
+	})
+	mux.HandleFunc("/v1/models/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		handleGeminiGenerateContent(w, r, service)
 	})
 	return mux
 }
 
-func handleChatCompletions(w http.ResponseWriter, r *http.Request, service ChatService) {
+func handleOpenAIChatCompletions(w http.ResponseWriter, r *http.Request, service ChatService) {
 	request, err := openaiprotocol.ParseChatCompletion(r.Body)
 	if err != nil {
 		writeMappedError(w, err)
 		return
 	}
+	serveChat(w, r, service, request, openaiprotocol.PrepareStream, openaiprotocol.WriteStreamChunk, openaiprotocol.WriteChatResponse)
+}
 
+func handleAnthropicMessages(w http.ResponseWriter, r *http.Request, service ChatService) {
+	request, err := anthropicprotocol.ParseMessages(r.Body)
+	if err != nil {
+		writeMappedError(w, err)
+		return
+	}
+	serveChat(w, r, service, request, anthropicprotocol.PrepareStream, anthropicprotocol.WriteStreamChunk, anthropicprotocol.WriteResponse)
+}
+
+func handleGeminiGenerateContent(w http.ResponseWriter, r *http.Request, service ChatService) {
+	request, err := geminiprotocol.ParseGenerateContent(r)
+	if err != nil {
+		writeMappedError(w, err)
+		return
+	}
+	serveChat(w, r, service, request, geminiprotocol.PrepareStream, geminiprotocol.WriteStreamChunk, geminiprotocol.WriteResponse)
+}
+
+func serveChat(
+	w http.ResponseWriter,
+	r *http.Request,
+	service ChatService,
+	request canonical.ChatRequest,
+	prepareStream func(http.ResponseWriter) (http.Flusher, bool),
+	writeStream func(io.Writer, canonical.StreamChunk) error,
+	writeResponse func(http.ResponseWriter, *canonical.ChatResponse) error,
+) {
 	if request.Stream {
-		flusher, ok := w.(http.Flusher)
+		flusher, ok := prepareStream(w)
 		if !ok {
 			openaiprotocol.WriteError(w, http.StatusInternalServerError, "streaming is not supported by this server")
 			return
 		}
 
 		headersWritten := false
-		err = service.StreamChat(r.Context(), request, func(chunk canonical.StreamChunk) error {
+		err := service.StreamChat(r.Context(), request, func(chunk canonical.StreamChunk) error {
 			if !headersWritten {
-				openaiprotocol.PrepareStream(w)
 				headersWritten = true
 			}
-			if err := openaiprotocol.WriteStreamChunk(w, chunk); err != nil {
+			if err := writeStream(w, chunk); err != nil {
 				return err
 			}
 			flusher.Flush()
@@ -77,7 +129,7 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request, service ChatS
 		writeMappedError(w, err)
 		return
 	}
-	if err := openaiprotocol.WriteChatResponse(w, response); err != nil {
+	if err := writeResponse(w, response); err != nil {
 		writeMappedError(w, err)
 	}
 }
@@ -105,7 +157,9 @@ func writeMappedError(w http.ResponseWriter, err error) {
 
 	status := http.StatusBadGateway
 	switch {
-	case errors.Is(err, openaiprotocol.ErrInvalidRequest):
+	case errors.Is(err, openaiprotocol.ErrInvalidRequest),
+		errors.Is(err, anthropicprotocol.ErrInvalidRequest),
+		errors.Is(err, geminiprotocol.ErrInvalidRequest):
 		status = http.StatusBadRequest
 	case errors.Is(err, router.ErrNoRoute):
 		status = http.StatusNotFound

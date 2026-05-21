@@ -34,6 +34,7 @@ type Node struct {
 
 type Group struct {
 	Name            string
+	Protocol        string
 	Strategy        Strategy
 	Timeout         time.Duration
 	RetryCount      int
@@ -237,6 +238,10 @@ func normalizeGroup(group Group) (Group, error) {
 	}
 	if group.Strategy == "" {
 		group.Strategy = StrategyRoundRobin
+	}
+	group.Protocol = strings.TrimSpace(group.Protocol)
+	if group.Protocol == "" {
+		group.Protocol = "openai"
 	}
 	if group.Strategy != StrategyRoundRobin && group.Strategy != StrategyFillFirst {
 		return Group{}, fmt.Errorf("provider group %q has unsupported strategy %q", group.Name, group.Strategy)

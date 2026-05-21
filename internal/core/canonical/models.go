@@ -3,11 +3,14 @@ package canonical
 import "encoding/json"
 
 const ProtocolOpenAIChatCompletions = "openai_chat_completions"
+const ProtocolAnthropicMessages = "anthropic_messages"
+const ProtocolGeminiGenerateContent = "gemini_generate_content"
 
 type ChatRequest struct {
 	ID            string
 	Protocol      string
 	Model         string
+	RawBody       json.RawMessage
 	Messages      []Message
 	Tools         json.RawMessage
 	Temperature   *float64

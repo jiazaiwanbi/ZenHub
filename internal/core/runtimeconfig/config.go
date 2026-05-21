@@ -47,6 +47,7 @@ type Route struct {
 
 type ProviderGroup struct {
 	Name            string               `json:"name"`
+	Protocol        string               `json:"protocol"`
 	Strategy        string               `json:"strategy"`
 	Timeout         Duration             `json:"timeout"`
 	RetryCount      int                  `json:"retry_count"`
@@ -251,6 +252,7 @@ func convertGroup(group ProviderGroup) (balancer.Group, error) {
 
 	return balancer.Group{
 		Name:            strings.TrimSpace(group.Name),
+		Protocol:        strings.TrimSpace(group.Protocol),
 		Strategy:        balancer.Strategy(strings.TrimSpace(group.Strategy)),
 		Timeout:         timeout,
 		RetryCount:      group.RetryCount,

@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"zenhub/internal/core/balancer"
 	"zenhub/internal/core/canonical"
 	"zenhub/internal/core/router"
-	"zenhub/internal/core/transformer"
 )
 
 var ErrRelayNotImplemented = errors.New("relay mode is not implemented in phase 1")
@@ -44,11 +44,12 @@ func (d *Direct) Execute(
 	node balancer.Node,
 	req canonical.ChatRequest,
 ) (*canonical.ChatResponse, error) {
-	payload, err := transformer.OpenAIChatRequest(req, decision.UpstreamModel, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build upstream request: %w", err)
+	model := req.Model
+	if decision.UpstreamModel != "" {
+		model = decision.UpstreamModel
 	}
-	return executeOpenAIChat(ctx, d.client, group, node, payload, directChatCompletionsPath)
+	path := directPath(group.Protocol, model, false)
+	return executeProtocolChat(ctx, d.client, group, node, withModel(req, model), group.Protocol, path)
 }
 
 func (d *Direct) Stream(
@@ -59,12 +60,35 @@ func (d *Direct) Stream(
 	req canonical.ChatRequest,
 	yield func(canonical.StreamChunk) error,
 ) error {
-	forceStream := true
-	payload, err := transformer.OpenAIChatRequest(req, decision.UpstreamModel, &forceStream)
-	if err != nil {
-		return fmt.Errorf("build upstream request: %w", err)
+	model := req.Model
+	if decision.UpstreamModel != "" {
+		model = decision.UpstreamModel
 	}
-	return streamOpenAIChat(ctx, d.client, group, node, payload, directChatCompletionsPath, yield)
+	path := directPath(group.Protocol, model, true)
+	streamReq := withModel(req, model)
+	streamReq.Stream = true
+	return streamProtocolChat(ctx, d.client, group, node, streamReq, group.Protocol, path, yield)
+}
+
+func directPath(protocol, model string, stream bool) string {
+	switch normalizeProtocol(protocol) {
+	case "anthropic":
+		return "/v1/messages"
+	case "gemini":
+		operation := "generateContent"
+		if stream {
+			operation = "streamGenerateContent"
+		}
+		return fmt.Sprintf("/v1beta/models/%s:%s", url.PathEscape(model), operation)
+	default:
+		return "/v1/chat/completions"
+	}
+}
+
+func withModel(req canonical.ChatRequest, model string) canonical.ChatRequest {
+	cloned := req
+	cloned.Model = model
+	return cloned
 }
 
 func readUpstreamError(resp *http.Response) error {

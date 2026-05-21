@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
 	"zenhub/internal/core/balancer"
 	"zenhub/internal/core/canonical"
 	"zenhub/internal/core/executor"
+	anthropicprotocol "zenhub/internal/core/protocol/anthropic"
+	geminiprotocol "zenhub/internal/core/protocol/gemini"
 	openaiprotocol "zenhub/internal/core/protocol/openai"
 	"zenhub/internal/core/router"
 	communityauth "zenhub/internal/server/community/auth"
@@ -150,7 +153,31 @@ func New(
 			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		handleRelayChatCompletions(w, r, relay)
+		handleRelayOpenAIChatCompletions(w, r, relay)
+	})))
+
+	mux.Handle("/api/v1/relay/messages", withAuth(auth, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		handleRelayAnthropicMessages(w, r, relay)
+	})))
+
+	mux.Handle("/api/v1/relay/v1beta/models/", withAuth(auth, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		handleRelayGeminiGenerateContent(w, r, relay)
+	})))
+
+	mux.Handle("/api/v1/relay/v1/models/", withAuth(auth, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			openaiprotocol.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		handleRelayGeminiGenerateContent(w, r, relay)
 	})))
 
 	return mux
@@ -174,27 +201,55 @@ func handleLogin(w http.ResponseWriter, r *http.Request, auth authService) {
 	writeJSON(w, http.StatusOK, session)
 }
 
-func handleRelayChatCompletions(w http.ResponseWriter, r *http.Request, relay relayService) {
+func handleRelayOpenAIChatCompletions(w http.ResponseWriter, r *http.Request, relay relayService) {
 	request, err := openaiprotocol.ParseChatCompletion(r.Body)
 	if err != nil {
 		writeMappedError(w, err)
 		return
 	}
+	serveRelayChat(w, r, relay, request, openaiprotocol.PrepareStream, openaiprotocol.WriteStreamChunk, openaiprotocol.WriteChatResponse)
+}
 
+func handleRelayAnthropicMessages(w http.ResponseWriter, r *http.Request, relay relayService) {
+	request, err := anthropicprotocol.ParseMessages(r.Body)
+	if err != nil {
+		writeMappedError(w, err)
+		return
+	}
+	serveRelayChat(w, r, relay, request, anthropicprotocol.PrepareStream, anthropicprotocol.WriteStreamChunk, anthropicprotocol.WriteResponse)
+}
+
+func handleRelayGeminiGenerateContent(w http.ResponseWriter, r *http.Request, relay relayService) {
+	request, err := geminiprotocol.ParseGenerateContent(r)
+	if err != nil {
+		writeMappedError(w, err)
+		return
+	}
+	serveRelayChat(w, r, relay, request, geminiprotocol.PrepareStream, geminiprotocol.WriteStreamChunk, geminiprotocol.WriteResponse)
+}
+
+func serveRelayChat(
+	w http.ResponseWriter,
+	r *http.Request,
+	relay relayService,
+	request canonical.ChatRequest,
+	prepareStream func(http.ResponseWriter) (http.Flusher, bool),
+	writeStream func(io.Writer, canonical.StreamChunk) error,
+	writeResponse func(http.ResponseWriter, *canonical.ChatResponse) error,
+) {
 	if request.Stream {
-		flusher, ok := w.(http.Flusher)
+		flusher, ok := prepareStream(w)
 		if !ok {
 			openaiprotocol.WriteError(w, http.StatusInternalServerError, "streaming is not supported by this server")
 			return
 		}
 
 		headersWritten := false
-		err = relay.StreamChat(r.Context(), request, func(chunk canonical.StreamChunk) error {
+		err := relay.StreamChat(r.Context(), request, func(chunk canonical.StreamChunk) error {
 			if !headersWritten {
-				openaiprotocol.PrepareStream(w)
 				headersWritten = true
 			}
-			if err := openaiprotocol.WriteStreamChunk(w, chunk); err != nil {
+			if err := writeStream(w, chunk); err != nil {
 				return err
 			}
 			flusher.Flush()
@@ -211,7 +266,7 @@ func handleRelayChatCompletions(w http.ResponseWriter, r *http.Request, relay re
 		writeMappedError(w, err)
 		return
 	}
-	if err := openaiprotocol.WriteChatResponse(w, response); err != nil {
+	if err := writeResponse(w, response); err != nil {
 		writeMappedError(w, err)
 	}
 }
@@ -276,7 +331,9 @@ func writeMappedError(w http.ResponseWriter, err error) {
 
 	status := http.StatusBadGateway
 	switch {
-	case errors.Is(err, openaiprotocol.ErrInvalidRequest):
+	case errors.Is(err, openaiprotocol.ErrInvalidRequest),
+		errors.Is(err, anthropicprotocol.ErrInvalidRequest),
+		errors.Is(err, geminiprotocol.ErrInvalidRequest):
 		status = http.StatusBadRequest
 	case errors.Is(err, communityauth.ErrInvalidCredentials):
 		status = http.StatusUnauthorized
